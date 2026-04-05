@@ -1,0 +1,40 @@
+# 2026/03/23 12:09:12.138571 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw table: "a0"
+# 2026/03/23 12:09:12.139084 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw numAddCols: 0
+# 2026/03/23 12:09:12.139084 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw numDropCols: 1
+# 2026/03/23 12:09:12.139084 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw dropColName: "a0"
+# 2026/03/23 12:09:12.139110 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw addIdx: true
+# 2026/03/23 12:09:12.139110 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] [rapid] draw idxCol: "a0"
+# 2026/03/23 12:09:12.139129 [TestProperty17_GrammarProducesValidAlterTableSQL/postgres] Each alter statement should start with ALTER TABLE, CREATE INDEX, CREATE UNIQUE INDEX, or DROP INDEX, got: CREATE INDEX "idx_a0_a0" ON "a0" ("a0")
+# 
+v0.4.8#13415340039131503797
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

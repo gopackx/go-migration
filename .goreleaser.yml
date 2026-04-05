@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+builds:
+  - main: ./cmd/migrator
+    binary: go-migration
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.Version={{.Version}} -X main.BuildDate={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"

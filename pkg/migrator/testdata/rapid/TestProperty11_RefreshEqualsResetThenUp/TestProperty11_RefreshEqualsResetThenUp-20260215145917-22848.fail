@@ -1,0 +1,37 @@
+# 2026/02/15 14:59:17.115487 [TestProperty11_RefreshEqualsResetThenUp] [rapid] draw mig_count: 3
+# 2026/02/15 14:59:17.115487 [TestProperty11_RefreshEqualsResetThenUp] [rapid] draw mig_base: 20262113720501
+# 2026/02/15 14:59:17.115487 [TestProperty11_RefreshEqualsResetThenUp] [rapid] draw appliedCount: 0
+# 2026/02/15 14:59:17.115487 [TestProperty11_RefreshEqualsResetThenUp] 
+# 	Error Trace:	D:/programming/golang/native/go-migration/pkg/migrator/migrator_property_test.go:522
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/programming/golang/native/go-migration/pkg/migrator/migrator_property_test.go:467
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Not equal: 
+# 	            	expected: []string{}
+# 	            	actual  : []string(nil)
+# 	            	
+# 	            	Diff:
+# 	            	--- Expected
+# 	            	+++ Actual
+# 	            	@@ -1,3 +1,2 @@
+# 	            	-([]string) {
+# 	            	-}
+# 	            	+([]string) <nil>
+# 	            	 
+# 	Test:       	TestProperty11_RefreshEqualsResetThenUp
+# 	Messages:   	Refresh reset phase should call Down() in reverse order
+# 
+v0.4.8#10511244946528472300
+0x2a2ddeace96a3
+0x52bc9f3ce340a
+0x2
+0x62d0e68c9a1f3
+0x1e2aafb3ea26e6
+0x1804abebae
+0xe703f0575
+0x1645c1d8eaa8ff
+0x6e0b54f86e02
+0x0

@@ -1,0 +1,207 @@
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw table: "b3e12"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw numCols: 3
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colName: "la"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colType: 1
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw nullable: false
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasDefault: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw defaultStr: "ga"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw unique: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colName: "bg"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colType: 2
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw nullable: false
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasDefault: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw defaultInt: 590
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw unique: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colName: "ps0"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw colType: 5
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw nullable: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasDefault: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw unique: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasIndex: false
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasForeignKey: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw fkCol: "bg"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw refTable: "k5g"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw refCol: "v130"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasOnDelete: true
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw onDelete: "NO ACTION"
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] [rapid] draw hasOnUpdate: false
+# 2026/02/15 14:24:45.092179 [TestProperty19_BlueprintToSQLRoundTrip] 
+# 	Error Trace:	D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:381
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:343
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Not equal: 
+# 	            	expected: "TEXT"
+# 	            	actual  : "TEXT NOT NULL DEFAULT"
+# 	            	
+# 	            	Diff:
+# 	            	--- Expected
+# 	            	+++ Actual
+# 	            	@@ -1 +1 @@
+# 	            	-TEXT
+# 	            	+TEXT NOT NULL DEFAULT
+# 	Test:       	TestProperty19_BlueprintToSQLRoundTrip
+# 	Messages:   	Column "la" SQL type should match (expected TEXT, got TEXT NOT NULL DEFAULT)
+# 2026/02/15 14:24:45.092691 [TestProperty19_BlueprintToSQLRoundTrip] 
+# 	Error Trace:	D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:381
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:343
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Not equal: 
+# 	            	expected: "INTEGER"
+# 	            	actual  : "INTEGER NOT NULL DEFAULT 590 UNIQUE"
+# 	            	
+# 	            	Diff:
+# 	            	--- Expected
+# 	            	+++ Actual
+# 	            	@@ -1 +1 @@
+# 	            	-INTEGER
+# 	            	+INTEGER NOT NULL DEFAULT 590 UNIQUE
+# 	Test:       	TestProperty19_BlueprintToSQLRoundTrip
+# 	Messages:   	Column "bg" SQL type should match (expected INTEGER, got INTEGER NOT NULL DEFAULT 590 UNIQUE)
+# 2026/02/15 14:24:45.092702 [TestProperty19_BlueprintToSQLRoundTrip] 
+# 	Error Trace:	D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:381
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/programming/golang/native/go-migration/pkg/schema/grammars/roundtrip_property_test.go:343
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Not equal: 
+# 	            	expected: "TIMESTAMPTZ"
+# 	            	actual  : "TIMESTAMPTZ UNIQUE"
+# 	            	
+# 	            	Diff:
+# 	            	--- Expected
+# 	            	+++ Actual
+# 	            	@@ -1 +1 @@
+# 	            	-TIMESTAMPTZ
+# 	            	+TIMESTAMPTZ UNIQUE
+# 	Test:       	TestProperty19_BlueprintToSQLRoundTrip
+# 	Messages:   	Column "ps0" SQL type should match (expected TIMESTAMPTZ, got TIMESTAMPTZ UNIQUE)
+# 
+v0.4.8#7689834493692539693
+0x0
+0xfb6085ea8dcb
+0x1
+0x90e5e5228c55e
+0x0
+0x52360fd9357fa
+0x3
+0x8f07eef67c23d
+0x0
+0xc00a536ea4679
+0xf
+0xd1c1e44930592
+0x0
+0x5bb3326270228
+0x1
+0x12645f08184abb
+0x0
+0x8c9f8344bfbf7
+0x2
+0x3937baca0ecdd
+0xbcec9cd941517
+0xadbc771ebd7a4
+0x6
+0x7
+0x2
+0x0
+0xb53f4c9616474
+0xb
+0x1ca7b160b64a3
+0x0
+0xd64f5c5a83a76
+0xb
+0x52bc0d7fee43c
+0x242814208d625
+0x1
+0x0
+0x1
+0x56357f6b5cec3
+0x0
+0xa47bff877509c
+0x6
+0x1bcfbe3ad58042
+0x0
+0x4294c234d84d8
+0x0
+0x4918b628981b1
+0x1
+0x0
+0x30a8f7f22737
+0x1
+0x2117cd763f67e
+0x0
+0x1cc9adc2cc5a78
+0x11
+0x19fda12a88948
+0xe913ec33a039a
+0x2
+0x0
+0x1
+0x9d52e0a4fe15f
+0x18d4705df0e7f5
+0x24e
+0x1
+0x0
+0x1abf3c47bc83e0
+0xf
+0x1b7de500aa5e19
+0x0
+0x115db1bc6ed942
+0x1d
+0x174252c7ad5d9c
+0x0
+0x110e5d9c3a020
+0x0
+0x5189fc252e978
+0x10da55a1bafdc7
+0xc
+0x5
+0x1
+0x1
+0x1
+0x0
+0x1
+0x16896a28325c93
+0x3
+0x1
+0x0
+0xdd860d2431ec8
+0xa
+0xd1d8c65ce77f
+0x0
+0x11bb22d2e7fbd1
+0x5
+0x1d1745abdec106
+0x0
+0xc10f123afb8ba
+0x11
+0x37b3a0ed222d1
+0x0
+0x14369cf0729567
+0x15
+0x8bac758b9d5d5
+0x0
+0x632c6d51f52e
+0x1
+0x156bbfd60973d2
+0x0
+0x4d76c71316764
+0x3
+0x62935a5b90ab1
+0x0
+0x22ad304bfb0c8
+0x0
+0x3543213ce3bd2
+0x1
+0x1d79a96285e993
+0x3
+0x0

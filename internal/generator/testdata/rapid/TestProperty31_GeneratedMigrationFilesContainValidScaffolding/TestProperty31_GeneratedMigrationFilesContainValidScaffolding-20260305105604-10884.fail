@@ -1,0 +1,86 @@
+# 2026/03/05 10:56:04.345233 [TestProperty31_GeneratedMigrationFilesContainValidScaffolding] [rapid] draw description: "jaocmam_eb_ed_pz"
+# 2026/03/05 10:56:04.347192 [TestProperty31_GeneratedMigrationFilesContainValidScaffolding] 
+# 	Error Trace:	D:/Programming/Golang/native/go-migration/internal/generator/generator_property_test.go:57
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/Programming/Golang/native/go-migration/internal/generator/generator_property_test.go:40
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Expect "2024_06_15_103045_6650_jaocmam_eb_ed_pz.go" to match "^\d{14}_jaocmam_eb_ed_pz\.go$"
+# 	Test:       	TestProperty31_GeneratedMigrationFilesContainValidScaffolding
+# 	Messages:   	Filename should match YYYYMMDDHHMMSS_description.go pattern
+# 2026/03/05 10:56:04.347741 [TestProperty31_GeneratedMigrationFilesContainValidScaffolding] 
+# 	Error Trace:	D:/Programming/Golang/native/go-migration/internal/generator/generator_property_test.go:61
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andri/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/Programming/Golang/native/go-migration/internal/generator/generator_property_test.go:40
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Should be true
+# 	Test:       	TestProperty31_GeneratedMigrationFilesContainValidScaffolding
+# 	Messages:   	Filename should start with the correct timestamp
+# 
+v0.4.8#3838198485494017411
+0xf77a1fcd7230d
+0x160f3745a4aca8
+0x3
+0x11b222c4318663
+0x0
+0x190fa4ee13a4d4
+0x9
+0x9fbecb28517be
+0x0
+0x1363fc5e6e2ac9
+0x0
+0xf8b75eeb664be
+0x0
+0xcc8ead9e06ce2
+0xe
+0x985d0a51a6cc5
+0x0
+0xe6da877d67424
+0x1d
+0x2
+0xc4f2bafc66d9f
+0x0
+0x19c370dff80768
+0xc
+0x1ff8bb2138aa0b
+0x0
+0x48fc4bc3d8cdd
+0x0
+0x159c83870472c1
+0x0
+0xd8b274e3148f7
+0xc
+0x62cf764922e8e
+0x766cbdd938ffb
+0x0
+0x1344a4c9a9512d
+0x4
+0x1ab2bfddf4fe77
+0x0
+0xbdb16430f4bd
+0x1
+0x79e9b8beb0002
+0x12900d164c22da
+0x0
+0x14c6747a515e12
+0x1f
+0x4
+0xc7fc4a24a6c0b
+0x0
+0x5d91f420fda9d
+0x3
+0x515dd763f4b40
+0xea1d291dc816f
+0x0
+0x1d027dc1666e00
+0xf
+0x1aeb86f1e9ff2f
+0x0
+0x1fc1e7d040f9aa
+0xffffffffffffffff
+0x38257e85c720

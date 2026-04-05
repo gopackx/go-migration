@@ -1,0 +1,21 @@
+package migrations
+
+import (
+	"github.com/gopackx/go-migration/pkg/schema"
+)
+
+// {{.StructName}} migration.
+type {{.StructName}} struct{}
+
+// Up runs the migration.
+func (m *{{.StructName}}) Up(s *schema.Builder) error {
+	return s.Create("{{.TableName}}", func(bp *schema.Blueprint) {
+		bp.ID()
+		bp.Timestamps()
+	})
+}
+
+// Down reverses the migration.
+func (m *{{.StructName}}) Down(s *schema.Builder) error {
+	return s.Drop("{{.TableName}}")
+}

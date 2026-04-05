@@ -1,0 +1,18 @@
+{
+  "default": "default",
+  "connections": {
+    "default": {
+      "driver": "mysql",
+      "host": "${DB_HOST}",
+      "port": 3306,
+      "database": "${DB_DATABASE}",
+      "username": "${DB_USERNAME}",
+      "password": "${DB_PASSWORD}"
+    }
+  },
+  "migration_dir": "database/migrations",
+  "seeder_dir": "database/seeders",
+  "factory_dir": "database/factories",
+  "migration_table": "migrations",
+  "log_level": "info"
+}

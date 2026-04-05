@@ -1,0 +1,19 @@
+package factories
+
+import (
+	"github.com/gopackx/go-migration/pkg/seeder/factory"
+)
+
+// {{.StructName}} model.
+type {{.StructName}} struct {
+	// TODO: define model fields
+}
+
+// New{{.StructName}}Factory creates a factory for {{.StructName}}.
+func New{{.StructName}}Factory() *factory.Factory[{{.StructName}}] {
+	return factory.NewFactory(func(f factory.Faker) {{.StructName}} {
+		return {{.StructName}}{
+			// TODO: set fields using faker
+		}
+	})
+}

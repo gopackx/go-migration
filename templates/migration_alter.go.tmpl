@@ -1,0 +1,22 @@
+package migrations
+
+import (
+	"github.com/gopackx/go-migration/pkg/schema"
+)
+
+// {{.StructName}} migration.
+type {{.StructName}} struct{}
+
+// Up runs the migration.
+func (m *{{.StructName}}) Up(s *schema.Builder) error {
+	return s.Alter("{{.TableName}}", func(bp *schema.Blueprint) {
+		// TODO: define table alterations
+	})
+}
+
+// Down reverses the migration.
+func (m *{{.StructName}}) Down(s *schema.Builder) error {
+	return s.Alter("{{.TableName}}", func(bp *schema.Blueprint) {
+		// TODO: reverse table alterations
+	})
+}

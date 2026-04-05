@@ -1,0 +1,36 @@
+# 2026/02/15 14:59:17.110811 [TestProperty10_ResetClearsAllApplied] [rapid] draw mig_count: 2
+# 2026/02/15 14:59:17.110811 [TestProperty10_ResetClearsAllApplied] [rapid] draw mig_base: 20243323480055
+# 2026/02/15 14:59:17.110811 [TestProperty10_ResetClearsAllApplied] [rapid] draw appliedCount: 0
+# 2026/02/15 14:59:17.111797 [TestProperty10_ResetClearsAllApplied] 
+# 	Error Trace:	D:/programming/golang/native/go-migration/pkg/migrator/migrator_property_test.go:459
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/andrianprasetya/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/programming/golang/native/go-migration/pkg/migrator/migrator_property_test.go:415
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1695
+# 	Error:      	Not equal: 
+# 	            	expected: []string{}
+# 	            	actual  : []string(nil)
+# 	            	
+# 	            	Diff:
+# 	            	--- Expected
+# 	            	+++ Actual
+# 	            	@@ -1,3 +1,2 @@
+# 	            	-([]string) {
+# 	            	-}
+# 	            	+([]string) <nil>
+# 	            	 
+# 	Test:       	TestProperty10_ResetClearsAllApplied
+# 	Messages:   	Reset should call Down() for all applied migrations in reverse order
+# 
+v0.4.8#12911287976396428917
+0x1d93140ddd6b16
+0x5f44d3fa536e2
+0x1
+0x18cc989ec05857
+0x1e1c4f36030afc
+0xa1042b4b7
+0x154380b7f05af3
+0x4773474c7af10
+0x0

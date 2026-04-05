@@ -1,0 +1,47 @@
+# 2026/03/23 12:09:12.151998 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw table: "a0"
+# 2026/03/23 12:09:12.151998 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw numAddCols: 1
+# 2026/03/23 12:09:12.151998 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw addColName: "a0"
+# 2026/03/23 12:09:12.151998 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw addColType: 0
+# 2026/03/23 12:09:12.152513 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw len: 1
+# 2026/03/23 12:09:12.152513 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw numDropCols: 0
+# 2026/03/23 12:09:12.152513 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw addIdx: true
+# 2026/03/23 12:09:12.152513 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] [rapid] draw idxCol: "a0"
+# 2026/03/23 12:09:12.152539 [TestProperty17_GrammarProducesValidAlterTableSQL/sqlite] Each alter statement should start with ALTER TABLE, CREATE INDEX, CREATE UNIQUE INDEX, or DROP INDEX, got: CREATE INDEX "idx_a0_a0" ON "a0" ("a0")
+# 
+v0.4.8#10237199425799458818
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
