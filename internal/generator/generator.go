@@ -30,6 +30,7 @@ type templateData struct {
 	StructName    string
 	TableName     string
 	MigrationName string // e.g., "2024_02_15_120405_4827_create_users_table"
+	PackageName   string // Go package name, derived from the output directory
 }
 
 // Generator generates migration and seeder files from templates.
@@ -62,7 +63,11 @@ func (g *Generator) Migration(description string, opts MigrationOptions) (string
 	structName := toStructName(description)
 
 	tmplName := "templates/migration.go.tmpl"
-	data := templateData{StructName: structName, MigrationName: migrationName}
+	data := templateData{
+		StructName:    structName,
+		MigrationName: migrationName,
+		PackageName:   packageNameForDir(g.outputDir, "migrations"),
+	}
 
 	if opts.CreateTable != "" {
 		tmplName = "templates/migration_create.go.tmpl"
@@ -116,7 +121,7 @@ func (g *Generator) Seeder(description string) (string, error) {
 		return "", fmt.Errorf("parse seeder template: %w", err)
 	}
 
-	data := templateData{StructName: structName}
+	data := templateData{StructName: structName, PackageName: packageNameForDir(g.outputDir, "seeders")}
 
 	outPath := filepath.Join(g.outputDir, filename)
 	if err := os.MkdirAll(g.outputDir, 0o755); err != nil {
@@ -152,7 +157,7 @@ func (g *Generator) Factory(description string) (string, error) {
 		return "", fmt.Errorf("parse factory template: %w", err)
 	}
 
-	data := templateData{StructName: structName}
+	data := templateData{StructName: structName, PackageName: packageNameForDir(g.outputDir, "factories")}
 
 	outPath := filepath.Join(g.outputDir, filename)
 	if err := os.MkdirAll(g.outputDir, 0o755); err != nil {
@@ -170,6 +175,27 @@ func (g *Generator) Factory(description string) (string, error) {
 	}
 
 	return outPath, nil
+}
+
+// packageNameForDir derives a Go package name from the output directory's
+// base name, so a folder configured as "db/schema" yields "package schema"
+// instead of a hardcoded name that would not compile. Separators such as
+// hyphens, dots, and spaces are stripped ("db-migrations" -> "dbmigrations").
+// If the base name does not yield a valid Go identifier (empty, or starting
+// with a digit — e.g. the numbered temp dirs used in tests), fallback is used.
+func packageNameForDir(dir, fallback string) string {
+	base := filepath.Base(filepath.Clean(dir))
+	var b strings.Builder
+	for _, r := range base {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	name := b.String()
+	if name == "" || unicode.IsDigit(rune(name[0])) {
+		return fallback
+	}
+	return name
 }
 
 // toStructName converts a snake_case description to PascalCase.

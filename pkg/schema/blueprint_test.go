@@ -320,6 +320,33 @@ func TestBlueprint_UniqueIndex(t *testing.T) {
 	}
 }
 
+func TestBlueprint_Index_Named(t *testing.T) {
+	bp := NewBlueprint("users")
+	idx := bp.Index("email").Named("idx_users_email_lower")
+
+	if "idx_users_email_lower" != idx.Name {
+		t.Errorf("got %v, want %v", idx.Name, "idx_users_email_lower")
+	}
+
+	// The custom name is what gets stored on the blueprint, not the default.
+	stored := bp.Indexes()
+	if len(stored) != 1 {
+		t.Fatalf("len = %d, want %d", len(stored), 1)
+	}
+	if "idx_users_email_lower" != stored[0].Name {
+		t.Errorf("got %v, want %v", stored[0].Name, "idx_users_email_lower")
+	}
+}
+
+func TestBlueprint_Index_Named_EmptyKeepsDefault(t *testing.T) {
+	bp := NewBlueprint("users")
+	idx := bp.UniqueIndex("email").Named("")
+
+	if "uniq_users_email" != idx.Name {
+		t.Errorf("got %v, want %v", idx.Name, "uniq_users_email")
+	}
+}
+
 // --- Foreign key methods ---
 
 func TestBlueprint_Foreign(t *testing.T) {

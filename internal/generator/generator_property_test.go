@@ -41,7 +41,9 @@ func TestProperty31_GeneratedMigrationFilesContainValidScaffolding(t *testing.T)
 		defer os.RemoveAll(dir)
 
 		fixedTime := time.Date(2024, 6, 15, 10, 30, 45, 0, time.UTC)
-		gen := NewGenerator(dir)
+		// Output into a "migrations"-named dir so the generated package
+		// declaration is derived from the folder name.
+		gen := NewGenerator(filepath.Join(dir, "migrations"))
 		gen.nowFunc = func() time.Time { return fixedTime }
 		gen.randFunc = func(n int) int { return 5678 }
 
@@ -104,7 +106,9 @@ func TestProperty32_GeneratedSeederFilesContainValidScaffolding(t *testing.T) {
 		}
 		defer os.RemoveAll(dir)
 
-		gen := NewGenerator(dir)
+		// Output into a "seeders"-named dir so the generated package
+		// declaration is derived from the folder name.
+		gen := NewGenerator(filepath.Join(dir, "seeders"))
 
 		outPath, err := gen.Seeder(description)
 		if err != nil {
@@ -134,6 +138,15 @@ func TestProperty32_GeneratedSeederFilesContainValidScaffolding(t *testing.T) {
 		// Verify Run() method
 		if !strings.Contains(contentStr, "func (s *"+expectedStruct+") Run(db *sql.DB) error") {
 			t.Errorf("%q not in %q", "func (s *"+expectedStruct+") Run(db *sql.DB) error", contentStr)
+		}
+
+		// Verify the seeder auto-registers itself via init() so db:seed
+		// discovers it (parity with generated migrations).
+		if !strings.Contains(contentStr, "func init()") {
+			t.Errorf("%q not in %q", "func init()", contentStr)
+		}
+		if !strings.Contains(contentStr, `seeder.AutoRegister("`+expectedStruct+`", &`+expectedStruct+`{})`) {
+			t.Errorf("%q not in %q", `seeder.AutoRegister("`+expectedStruct+`", &`+expectedStruct+`{})`, contentStr)
 		}
 
 		// Verify package declaration

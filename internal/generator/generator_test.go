@@ -133,6 +133,69 @@ func TestSeeder_BasicFile(t *testing.T) {
 	if !strings.Contains(src, "package seeders") {
 		t.Errorf("%q not in %q", "package seeders", src)
 	}
+	// The generated seeder must auto-register itself so db:seed discovers it.
+	if !strings.Contains(src, "func init()") {
+		t.Errorf("%q not in %q", "func init()", src)
+	}
+	if !strings.Contains(src, `seeder.AutoRegister("User", &User{})`) {
+		t.Errorf("%q not in %q", `seeder.AutoRegister("User", &User{})`, src)
+	}
+	if !strings.Contains(src, `"github.com/gopackx/go-migration/pkg/seeder"`) {
+		t.Errorf("%q not in %q", `"github.com/gopackx/go-migration/pkg/seeder"`, src)
+	}
+}
+
+// TestPackageNameDerivedFromDir verifies that the generated package
+// declaration follows the output directory's base name instead of a
+// hardcoded value, so files generated into a custom folder compile.
+func TestPackageNameDerivedFromDir(t *testing.T) {
+	base := t.TempDir()
+
+	cases := []struct {
+		dirName     string
+		wantPackage string
+	}{
+		{"migrations", "package migrations"},
+		{"seeders", "package seeders"},
+		{"schema", "package schema"},
+		{"db-migrations", "package dbmigrations"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.dirName, func(t *testing.T) {
+			outDir := filepath.Join(base, tc.dirName)
+			g := NewGenerator(outDir)
+			g.nowFunc = func() time.Time { return time.Date(2024, 7, 15, 10, 30, 45, 0, time.UTC) }
+			g.randFunc = func(n int) int { return 1234 }
+
+			mPath, err := g.Migration("create_things", MigrationOptions{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			mSrc := readFile(t, mPath)
+			if !strings.Contains(mSrc, tc.wantPackage) {
+				t.Errorf("migration: %q not in %q", tc.wantPackage, mSrc)
+			}
+
+			sPath, err := g.Seeder("thing")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			sSrc := readFile(t, sPath)
+			if !strings.Contains(sSrc, tc.wantPackage) {
+				t.Errorf("seeder: %q not in %q", tc.wantPackage, sSrc)
+			}
+		})
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return string(content)
 }
 
 func TestMigration_FilenameFormat(t *testing.T) {

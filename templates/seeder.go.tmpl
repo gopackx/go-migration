@@ -1,8 +1,14 @@
-package seeders
+package {{.PackageName}}
 
 import (
 	"database/sql"
+
+	"github.com/gopackx/go-migration/pkg/seeder"
 )
+
+func init() {
+	seeder.AutoRegister("{{.StructName}}", &{{.StructName}}{})
+}
 
 // {{.StructName}} seeder.
 type {{.StructName}} struct{}
