@@ -2,43 +2,40 @@ package commands
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/gopackx/go-migration/internal/generator"
+	"github.com/gopackx/go-migration/pkg/migrator"
 	"github.com/gopackx/go-migration/pkg/seeder"
 )
 
-// MigratorRunner defines the migration operations needed by CLI commands.
-// It is satisfied by *migrator.Migrator (via MigratorAdapter) but defined
-// here as an interface to avoid an import cycle between commands and migrator.
-type MigratorRunner interface {
+// Migrator is the set of migration operations the CLI commands use. It is
+// satisfied directly by *migrator.Migrator; it is an interface only so that
+// the command tests can substitute fakes.
+type Migrator interface {
 	Up() error
 	Rollback(steps int) error
 	Reset() error
 	Refresh() error
 	Fresh() error
-	Status() ([]MigrationStatusInfo, error)
+	Status() ([]migrator.MigrationStatus, error)
 }
 
-// MigrationStatusInfo holds the status of a single migration.
-// It mirrors migrator.MigrationStatus without importing the package.
-type MigrationStatusInfo struct {
-	Name      string
-	Applied   bool
-	Batch     int
-	AppliedAt *time.Time
-}
+// *migrator.Migrator must satisfy Migrator without an adapter.
+var _ Migrator = (*migrator.Migrator)(nil)
 
-// TrackerCreator creates a migration tracker for the given DB.
+// TrackerCreator creates the migration tracking table. It is satisfied by
+// *migrator.Tracker.
 type TrackerCreator interface {
 	EnsureTable() error
 }
 
+var _ TrackerCreator = (*migrator.Tracker)(nil)
+
 // Locker acquires the cross-process migration lock. Lock blocks until the
 // lock is held (or fails, e.g. on timeout) and returns a function releasing
-// it. It is satisfied by an adapter over migrator.Migrator.Lock; the seed
-// commands use it so that seeders never run concurrently with each other or
-// with migrations.
+// it. The CLI implements it on top of migrator.Migrator.Lock; migrate:install
+// and the db:seed* commands hold it while they run, so that they never run
+// concurrently with each other or with migrations.
 type Locker interface {
 	Lock() (release func() error, err error)
 }
@@ -48,11 +45,12 @@ type Locker interface {
 // to avoid an import cycle between pkg/cli and pkg/cli/commands.
 type CommandContext struct {
 	DB             *sql.DB
-	Migrator       MigratorRunner
+	Migrator       Migrator
 	Seeder         *seeder.Runner
 	Generator      *generator.Generator
 	TrackerEnsurer TrackerCreator
-	// Locker, when non-nil, is held by the db:seed* commands while they run.
+	// Locker, when non-nil, is held by migrate:install and the db:seed*
+	// commands while they run.
 	Locker Locker
 }
 

@@ -31,6 +31,7 @@ func (g *mockGrammar) CompileRename(from, to string) string {
 	return "ALTER TABLE " + from + " RENAME TO " + to
 }
 func (g *mockGrammar) CompileHasTable(table string) string       { return "SELECT 1" }
+func (g *mockGrammar) CompileHasTableIn(s, table string) string  { return "SELECT 1" }
 func (g *mockGrammar) CompileHasColumn(table, col string) string { return "SELECT 1" }
 func (g *mockGrammar) CompileListTables() string                 { return "LIST TABLES" }
 
@@ -43,10 +44,14 @@ func (g *mockGrammar) CompileDropAllTables(tables []string) []string {
 	return stmts
 }
 
-// CompileTrackingTable and Placeholder mimic PostgreSQL so existing sqlmock
-// expectations ("CREATE TABLE IF NOT EXISTS", "$1") keep matching.
+// CompileTrackingTable, QuoteIdentifier and Placeholder mimic PostgreSQL so
+// sqlmock expectations ("CREATE TABLE IF NOT EXISTS", `"migrations"`, "$1")
+// match the SQL the tracker generates in production.
 func (g *mockGrammar) CompileTrackingTable(table string) string {
-	return "CREATE TABLE IF NOT EXISTS " + table + " (id SERIAL PRIMARY KEY, migration VARCHAR(255) NOT NULL UNIQUE, batch INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+	return "CREATE TABLE IF NOT EXISTS " + schema.QuoteQualified(g, table) + " (id SERIAL PRIMARY KEY, migration VARCHAR(255) NOT NULL UNIQUE, batch INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+}
+func (g *mockGrammar) QuoteIdentifier(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 func (g *mockGrammar) Placeholder(index int) string { return fmt.Sprintf("$%d", index) }
 

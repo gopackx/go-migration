@@ -369,6 +369,32 @@ dispatched by a small hand-written router in `pkg/cli` on top of the standard
 go build -o migrator ./cmd/migrator
 ```
 
+In your own project the binary is a few lines (this is what `migrator init`
+generates in `cmd/migrator/main.go`): blank-import the database drivers and
+your migrations/seeders packages, and call `app.Run()`:
+
+```go
+package main
+
+import (
+    "github.com/gopackx/go-migration/pkg/cli/app"
+
+    _ "github.com/go-sql-driver/mysql"
+    _ "github.com/lib/pq"
+    _ "modernc.org/sqlite"
+
+    _ "myapp/database/migrations"
+    _ "myapp/database/seeders"
+)
+
+func main() {
+    app.Run()
+}
+```
+
+The CLI lives in `pkg/cli/app`, separate from the library: importing
+`pkg/migrator` does not pull in the CLI, the config loader or the YAML parser.
+
 Available commands:
 
 | Command | Description |
@@ -380,7 +406,7 @@ Available commands:
 | `migrate:refresh` | Reset + migrate up (`--dry-run`) |
 | `migrate:fresh` | Drop all tables + migrate up (`--force`, `--dry-run`) |
 | `migrate:status` | Show migration status; read-only (`--check` exits 1 if any migration is pending) |
-| `migrate:install` | Create the migration tracking table |
+| `migrate:install` | Create the migration tracking table (under the migration lock) |
 | `make:migration` | Generate a migration file (`--create` or `--table` flags) |
 | `make:seeder` | Generate a seeder file |
 | `make:factory` | Generate a factory file |
@@ -389,9 +415,9 @@ Available commands:
 | `db:seed:truncate` | Delete all rows from a table (`--table`) |
 
 The commands that change the database (`migrate`, `migrate:rollback`,
-`migrate:reset`, `migrate:refresh`, `migrate:fresh`, `db:seed`,
-`db:seed:rollback`, `db:seed:truncate`) also accept `--lock-timeout <duration>`
-(default `30s`) and `--no-lock`; see
+`migrate:reset`, `migrate:refresh`, `migrate:fresh`, `migrate:install`,
+`db:seed`, `db:seed:rollback`, `db:seed:truncate`) also accept
+`--lock-timeout <duration>` (default `30s`) and `--no-lock`; see
 [Concurrency and locking](#concurrency-and-locking).
 
 `migrate:status` never writes: if the tracking table does not exist it reports
@@ -522,6 +548,12 @@ The connection used for the MySQL/SQLite drops is closed afterwards rather than
 returned to the pool, so the disabled foreign key checks never leak into later
 queries.
 
+Only the default schema (PostgreSQL `public`, the current MySQL database, the
+SQLite main database) is cleared. If the tracking table is schema-qualified
+(`WithTableName("app.migrations")`), Fresh also drops that table explicitly, so
+every migration runs again in batch 1; other tables in that schema are left
+alone.
+
 **Transactions.** Each migration runs in a transaction (unless it implements
 `TransactionOption`), and its row in the tracking table is written on that same
 transaction, so a failed migration leaves no tracking row behind. On PostgreSQL
@@ -530,6 +562,20 @@ completely. **MySQL commits DDL implicitly** (`CREATE`, `ALTER`, `DROP`, …): o
 DML (`INSERT`/`UPDATE`/`DELETE`) is rolled back with the tracking row, and a
 migration that fails after some DDL leaves that DDL applied. Keep MySQL
 migrations small (ideally one DDL statement each) so a failure is easy to repair.
+
+**Identifier quoting.** Table, column, index and tracking-table names are
+always quoted, with the delimiter escaped by doubling it: `"a""b"` on
+PostgreSQL and SQLite, `` `a``b` `` on MySQL. Names compared as values in the
+`HasTable`/`HasColumn` catalog queries are single-quoted with `'` doubled (and,
+on MySQL, `\` doubled). Any name the database accepts can therefore be used,
+including ones containing quote characters. Because names are quoted, they are
+case-sensitive on PostgreSQL. In schema-builder names (`Create`, `Alter`,
+`HasTable`, ...) a dot is part of the name. The tracking table name
+(`migration_table` / `WithTableName`) is the exception: it may be
+schema-qualified, and each dot-separated part is quoted separately —
+`app.migrations` becomes `"app"."migrations"` on PostgreSQL (schema `app`),
+`` `app`.`migrations` `` on MySQL (database `app`) and `"app"."migrations"` on
+SQLite (attached database `app`). The schema must already exist.
 
 **Dry-run** (`WithDryRun(w)`, `--dry-run`) prints the SQL instead of executing
 it and never writes to the database — not even the tracking table. It still
@@ -546,8 +592,10 @@ is safe: `Up`, `Rollback`, `Reset`, `Refresh` (one lock across both phases) and
 `Fresh` (locked before anything is dropped) take a cross-process lock before
 touching the tracking table, and compute the pending/applied migrations only
 once they hold it. A second process waits, then finds nothing left to do. The
-CLI's `db:seed`, `db:seed:rollback` and `db:seed:truncate` take the same lock,
-so seeders do not run concurrently with each other or with migrations.
+CLI's `migrate:install`, `db:seed`, `db:seed:rollback` and `db:seed:truncate`
+take the same lock, so concurrent installs do not race on `CREATE TABLE IF NOT
+EXISTS` (which is not atomic on PostgreSQL) and seeders do not run concurrently
+with each other or with migrations.
 Dry-run takes the lock too; `Status` / `migrate:status` does not.
 
 How the lock works per database:
@@ -587,7 +635,40 @@ Session-level locks need a real session: behind a transaction-pooling proxy
 (e.g. PgBouncer in `transaction` mode) connect the migrator directly to the
 database or use session pooling.
 
-## Upgrading: custom `Grammar` implementations
+## Upgrading to v1.2.0
+
+### CLI entry point and package layout
+
+- `migrator.Run()` is gone; use `app.Run()` from
+  `github.com/gopackx/go-migration/pkg/cli/app`. In your `cmd/migrator/main.go`
+  replace the import `github.com/gopackx/go-migration/pkg/migrator` with
+  `github.com/gopackx/go-migration/pkg/cli/app` and the call `migrator.Run()`
+  with `app.Run()`. The CLI wiring moved out of `pkg/migrator` so that the
+  library no longer depends on the CLI, the config loader or the YAML parser.
+- `migrator.ErrConfigValidation` was removed (the migrator never returned it);
+  use `config.ErrConfigValidation`.
+- If you build on `pkg/cli/commands` directly: `commands.MigratorRunner` and
+  `commands.MigrationStatusInfo` were removed. `CommandContext.Migrator` (and
+  `cli.CLIContext.Migrator`) is now a `commands.Migrator`, which
+  `*migrator.Migrator` satisfies directly (`Status()` returns
+  `[]migrator.MigrationStatus`); no adapter is needed.
+
+### Behaviour changes
+
+- `migrate:install` now takes the migration lock and accepts `--lock-timeout`
+  and `--no-lock`. On PostgreSQL/MySQL it therefore needs a pool of at least two
+  connections (or `--no-lock`), like the other writing commands.
+- The tracking table name is now quoted in every statement (it was previously
+  interpolated as-is). On PostgreSQL an unquoted name was folded to lower case,
+  so if your `migration_table` / `WithTableName` contains upper-case letters,
+  rename the existing table to the exact configured name (or configure the
+  lower-case name) before upgrading; otherwise a new, empty tracking table is
+  created. A schema-qualified name such as `app.migrations` keeps working: it
+  is quoted per part (`"app"."migrations"`, `` `app`.`migrations` ``).
+  `migrate:fresh` / `Fresh()` now also drops a schema-qualified tracking table
+  (it previously survived, so nothing was re-applied after the drop).
+
+### Custom `Grammar` implementations
 
 If you implement `schema.Grammar` yourself, the interface changed:
 
@@ -601,7 +682,17 @@ If you implement `schema.Grammar` yourself, the interface changed:
 - New methods:
   - `CompileListTables() string` — a query returning one row per table name.
   - `CompileTrackingTable(table string) string` — `CREATE TABLE IF NOT EXISTS`
-    for the tracking table (`id`, `migration` unique, `batch`, `created_at`).
+    for the tracking table (`id`, `migration` unique, `batch`, `created_at`),
+    with the possibly schema-qualified table name quoted by
+    `schema.QuoteQualified(g, table)`.
+  - `QuoteIdentifier(name string) string` — the name quoted as one identifier,
+    with the delimiter escaped by doubling it (`"a""b"`, `` `a``b` ``).
+    `schema.QuoteQualified` applies it to each dot-separated part of the
+    tracking table name, which the tracker uses in every query.
+  - `CompileHasTableIn(schema, table string) string` — like `CompileHasTable`,
+    but looks in the given schema (PostgreSQL schema, MySQL database, SQLite
+    attached database); used by `Tracker.TableExists` for a schema-qualified
+    tracking table.
   - `Placeholder(index int) string` — the bind parameter for the 1-based index
     (`$1` on PostgreSQL, `?` on MySQL/SQLite).
   - `CompileTryLock(key string) string` and `CompileUnlock(key string) string` —

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/gopackx/go-migration/pkg/migrator"
 )
 
-// stubMigrator is a minimal MigratorRunner for tests that need a non-nil Migrator.
+// stubMigrator is a minimal Migrator for tests that need a non-nil Migrator.
 type stubMigrator struct {
 	rollbackFn func(int) error
 }
@@ -18,10 +20,10 @@ func (s stubMigrator) Rollback(steps int) error {
 	}
 	return nil
 }
-func (stubMigrator) Reset() error                           { return nil }
-func (stubMigrator) Refresh() error                         { return nil }
-func (stubMigrator) Fresh() error                           { return nil }
-func (stubMigrator) Status() ([]MigrationStatusInfo, error) { return nil, nil }
+func (stubMigrator) Reset() error                                { return nil }
+func (stubMigrator) Refresh() error                              { return nil }
+func (stubMigrator) Fresh() error                                { return nil }
+func (stubMigrator) Status() ([]migrator.MigrationStatus, error) { return nil, nil }
 
 func TestConfirm_AcceptsY(t *testing.T) {
 	in := bytes.NewBufferString("y\n")

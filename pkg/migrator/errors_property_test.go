@@ -27,7 +27,6 @@ func allSentinelErrors() []error {
 		ErrSeederNotFound,
 		ErrUnsupportedType,
 		ErrConnectionNotFound,
-		ErrConfigValidation,
 	}
 }
 

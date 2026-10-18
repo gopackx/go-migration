@@ -2,22 +2,23 @@ package commands
 
 import (
 	"flag"
-	"time"
+
+	"github.com/gopackx/go-migration/pkg/migrator"
 )
 
 // Names of the per-command flags controlling the cross-process migration
 // lock. They are registered on every command that changes the database
 // (migrate, migrate:rollback, migrate:reset, migrate:refresh, migrate:fresh,
-// db:seed, db:seed:rollback, db:seed:truncate) and read by the CLI pre-run
-// hook, which configures the Migrator accordingly.
+// migrate:install, db:seed, db:seed:rollback, db:seed:truncate) and read by
+// the CLI pre-run hook, which configures the Migrator accordingly.
 const (
 	LockTimeoutFlag = "lock-timeout"
 	NoLockFlag      = "no-lock"
 )
 
-// DefaultLockTimeout is the default of --lock-timeout. It mirrors
-// migrator.DefaultLockTimeout (this package cannot import migrator).
-const DefaultLockTimeout = 30 * time.Second
+// DefaultLockTimeout is the default of --lock-timeout: the Migrator's own
+// default.
+const DefaultLockTimeout = migrator.DefaultLockTimeout
 
 // AddLockFlags registers --lock-timeout and --no-lock on fs.
 func AddLockFlags(fs *flag.FlagSet) {

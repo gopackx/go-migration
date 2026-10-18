@@ -139,12 +139,18 @@ func (g *MySQLGrammar) CompileRename(from, to string) string {
 
 // CompileHasTable generates a query to check if a table exists.
 func (g *MySQLGrammar) CompileHasTable(table string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '%s'", table)
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = %s", mysqlQuoteString(table))
+}
+
+// CompileHasTableIn generates a query to check if a table exists in the given
+// database (MySQL's schema).
+func (g *MySQLGrammar) CompileHasTableIn(schemaName, table string) string {
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s", mysqlQuoteString(schemaName), mysqlQuoteString(table))
 }
 
 // CompileHasColumn generates a query to check if a column exists in a table.
 func (g *MySQLGrammar) CompileHasColumn(table, column string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' AND column_name = '%s'", table, column)
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s", mysqlQuoteString(table), mysqlQuoteString(column))
 }
 
 // CompileListTables generates a query listing all base tables in the
@@ -167,14 +173,21 @@ func (g *MySQLGrammar) CompileDropAllTables(tables []string) []string {
 }
 
 // CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
-// the migration tracking table.
+// the migration tracking table. The table name may be qualified with a
+// database name and is quoted with schema.QuoteQualified.
 func (g *MySQLGrammar) CompileTrackingTable(table string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id         INT AUTO_INCREMENT PRIMARY KEY,
 		migration  VARCHAR(255) NOT NULL UNIQUE,
 		batch      INTEGER NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`, table)
+	)`, schema.QuoteQualified(g, table))
+}
+
+// QuoteIdentifier quotes a table or column name for MySQL: it is wrapped in
+// backticks, and embedded backticks are doubled.
+func (g *MySQLGrammar) QuoteIdentifier(name string) string {
+	return mysqlQuote(name)
 }
 
 // Placeholder returns the MySQL placeholder ("?").
@@ -320,9 +333,20 @@ func (g *MySQLGrammar) compileForeignKey(fk schema.ForeignKeyDefinition) string 
 	return sb.String()
 }
 
-// mysqlQuote wraps an identifier in backticks for MySQL.
+// mysqlQuote wraps an identifier in backticks for MySQL, doubling any
+// embedded backtick.
 func mysqlQuote(name string) string {
-	return fmt.Sprintf("`%s`", name)
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+}
+
+// mysqlQuoteString returns s as a single-quoted MySQL string literal. Single
+// quotes are doubled, and so are backslashes, since MySQL treats a backslash
+// in a string literal as an escape character (unless the NO_BACKSLASH_ESCAPES
+// SQL mode is set, in which case a name containing a backslash will not
+// match).
+func mysqlQuoteString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // mysqlQuoteSlice quotes each element in a string slice with backticks.

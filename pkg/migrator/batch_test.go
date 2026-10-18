@@ -31,7 +31,7 @@ func TestNextBatchNumber_FirstBatch(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(0))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -54,7 +54,7 @@ func TestNextBatchNumber_SubsequentBatch(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(5))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -77,7 +77,7 @@ func TestNextBatchNumber_Error(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnError(errors.New("db error"))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -102,11 +102,11 @@ func TestGetLastBatch_WithRecords(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	// GetLastBatchNumber
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(3))
 
 	// GetByBatch(3)
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1").
 		WithArgs(3).
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}).
 			AddRow("20240315000000_add_posts", 3, now).
@@ -141,7 +141,7 @@ func TestGetLastBatch_NoRecords(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(0))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -164,7 +164,7 @@ func TestGetLastBatch_BatchNumberError(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnError(errors.New("db error"))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -184,10 +184,10 @@ func TestGetLastBatch_GetByBatchError(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(2))
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1").
 		WithArgs(2).
 		WillReturnError(errors.New("db error"))
 
@@ -211,7 +211,7 @@ func TestGetLastNMigrations_ReturnsReversed(t *testing.T) {
 	defer db.Close()
 
 	now := time.Now().Truncate(time.Second)
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}).
 			AddRow("20240101000000_first", 1, now).
 			AddRow("20240201000000_second", 1, now).
@@ -246,7 +246,7 @@ func TestGetLastNMigrations_NExceedsTotal(t *testing.T) {
 	defer db.Close()
 
 	now := time.Now().Truncate(time.Second)
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}).
 			AddRow("20240101000000_first", 1, now).
 			AddRow("20240201000000_second", 1, now))
@@ -311,7 +311,7 @@ func TestGetLastNMigrations_NoApplied(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))
@@ -334,7 +334,7 @@ func TestGetLastNMigrations_QueryError(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnError(errors.New("db error"))
 
 	bm := NewBatchManager(NewTracker(db, "migrations"))

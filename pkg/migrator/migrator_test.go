@@ -492,12 +492,12 @@ func TestFresh_MySQLGrammar(t *testing.T) {
 	mock.ExpectExec("^SET FOREIGN_KEY_CHECKS = 1$").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	// Up(): MySQL tracking table DDL and ? placeholders.
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations .*INT AUTO_INCREMENT PRIMARY KEY").
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS `migrations` .*INT AUTO_INCREMENT PRIMARY KEY").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	expectGetApplied(mock, nil)
 	expectMaxBatch(mock, 0)
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO migrations (migration, batch) VALUES (?, ?)")).
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `migrations` (migration, batch) VALUES (?, ?)")).
 		WithArgs("20240101000000_create_users", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
@@ -642,11 +642,11 @@ func TestWithTableName(t *testing.T) {
 	}
 
 	// EnsureTable should use custom table name
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS custom_migrations").
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"custom_migrations\"").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	// GetApplied from custom table
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM custom_migrations").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"custom_migrations\"").
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}))
 
 	// NextBatchNumber
@@ -656,7 +656,7 @@ func TestWithTableName(t *testing.T) {
 
 	// Record into custom table, inside the migration transaction
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO custom_migrations").
+	mock.ExpectExec("INSERT INTO \"custom_migrations\"").
 		WithArgs("20240101000000_create_users", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()

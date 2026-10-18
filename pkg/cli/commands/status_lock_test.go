@@ -10,20 +10,21 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/gopackx/go-migration/pkg/migrator"
 	"github.com/gopackx/go-migration/pkg/seeder"
 )
 
-func statusCtx(statuses []MigrationStatusInfo) func() *CommandContext {
+func statusCtx(statuses []migrator.MigrationStatus) func() *CommandContext {
 	return func() *CommandContext {
 		return &CommandContext{Migrator: stubMigratorFn{
-			statusFn: func() ([]MigrationStatusInfo, error) { return statuses, nil },
+			statusFn: func() ([]migrator.MigrationStatus, error) { return statuses, nil },
 		}}
 	}
 }
 
 func TestMigrateStatusCommand_Check(t *testing.T) {
 	now := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
-	mixed := []MigrationStatusInfo{
+	mixed := []migrator.MigrationStatus{
 		{Name: "20240101000000_create_users", Applied: true, Batch: 1, AppliedAt: &now},
 		{Name: "20240102000000_create_posts"},
 		{Name: "20240103000000_add_bio"},
@@ -33,7 +34,7 @@ func TestMigrateStatusCommand_Check(t *testing.T) {
 	cases := []struct {
 		name     string
 		args     []string
-		statuses []MigrationStatusInfo
+		statuses []migrator.MigrationStatus
 		wantErr  string
 	}{
 		{"pending without --check", nil, mixed, ""},
@@ -221,7 +222,10 @@ func TestLockFlags_OnWritingCommandsOnly(t *testing.T) {
 		{"migrate:refresh", func(r reg) { RegisterMigrateRefreshCommand(r, getCtx, out) }, true},
 		{"migrate:fresh", func(r reg) { RegisterMigrateFreshCommand(r, getCtx, out, in) }, true},
 		{"migrate:status", func(r reg) { RegisterMigrateStatusCommand(r, getCtx, out) }, false},
-		{"migrate:install", func(r reg) { RegisterMigrateInstallCommand(r, getCtx) }, false},
+		{"migrate:install", func(r reg) { RegisterMigrateInstallCommand(r, getCtx) }, true},
+		{"db:seed", func(r reg) { RegisterSeedCommand(r, getCtx) }, true},
+		{"db:seed:rollback", func(r reg) { RegisterSeedRollbackCommand(r, getCtx) }, true},
+		{"db:seed:truncate", func(r reg) { RegisterSeedTruncateCommand(r, getCtx) }, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -236,5 +240,71 @@ func TestLockFlags_OnWritingCommandsOnly(t *testing.T) {
 				t.Errorf("--%s default = %s, want 30s", LockTimeoutFlag, timeout.DefValue)
 			}
 		})
+	}
+}
+
+// recordingTracker appends "ensure" to events when EnsureTable runs.
+type recordingTracker struct {
+	events *[]string
+	err    error
+}
+
+func (r recordingTracker) EnsureTable() error {
+	*r.events = append(*r.events, "ensure")
+	return r.err
+}
+
+func TestMigrateInstallCommand_HoldsLockAroundEnsureTable(t *testing.T) {
+	ensureErr := errors.New("create table failed")
+	lockErr := errors.New("could not acquire migration lock within 30s")
+	cases := []struct {
+		name       string
+		ensureErr  error
+		lockErr    error
+		wantErr    error
+		wantEvents string
+	}{
+		{"success", nil, nil, nil, "lock,ensure,release"},
+		{"EnsureTable fails: lock still released", ensureErr, nil, ensureErr, "lock,ensure,release"},
+		{"lock fails: table not touched", nil, lockErr, lockErr, "lock"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var events []string
+			ctx := &CommandContext{
+				TrackerEnsurer: recordingTracker{events: &events, err: c.ensureErr},
+				Locker:         fakeLocker{events: &events, lockErr: c.lockErr},
+			}
+			reg, cmd := captureRegister()
+			RegisterMigrateInstallCommand(reg, func() *CommandContext { return ctx })
+			fs := newFlagSet("migrate:install", cmd.setupFlags)
+			if err := fs.Parse(nil); err != nil {
+				t.Fatal(err)
+			}
+			err := cmd.handler(fs.Args(), fs)
+			if c.wantErr == nil && err != nil {
+				t.Fatalf("handler: %v", err)
+			}
+			if c.wantErr != nil && !errors.Is(err, c.wantErr) {
+				t.Fatalf("err = %v, want %v", err, c.wantErr)
+			}
+			if got := strings.Join(events, ","); got != c.wantEvents {
+				t.Errorf("events = %s, want %s", got, c.wantEvents)
+			}
+		})
+	}
+}
+
+func TestMigrateInstallCommand_WithoutLocker(t *testing.T) {
+	var events []string
+	ctx := &CommandContext{TrackerEnsurer: recordingTracker{events: &events}}
+	reg, cmd := captureRegister()
+	RegisterMigrateInstallCommand(reg, func() *CommandContext { return ctx })
+	fs := newFlagSet("migrate:install", cmd.setupFlags)
+	if err := cmd.handler(nil, fs); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if got := strings.Join(events, ","); got != "ensure" {
+		t.Errorf("events = %s, want ensure", got)
 	}
 }

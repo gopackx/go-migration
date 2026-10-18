@@ -18,8 +18,12 @@ type MigrationRecord struct {
 
 // Tracker manages the migrations tracking table in the database.
 //
-// The SQL dialect (DDL for the tracking table and bind-parameter placeholders)
-// comes from a schema.Grammar. NewTracker uses a PostgreSQL-compatible
+// The SQL dialect (DDL for the tracking table, identifier quoting and
+// bind-parameter placeholders) comes from a schema.Grammar. The table name may
+// be schema-qualified ("app.migrations": PostgreSQL schema, MySQL database,
+// SQLite attached database); each dot-separated part is quoted separately
+// (schema.QuoteQualified), so the parts may contain any character except a
+// dot, including the dialect's quote character. NewTracker uses a PostgreSQL-compatible
 // default; use NewTrackerWithGrammar for MySQL or SQLite.
 type Tracker struct {
 	db        *sql.DB
@@ -62,7 +66,11 @@ func (t *Tracker) EnsureTable() error {
 // CompileHasTable query. It is read-only and is used instead of EnsureTable
 // in dry-run mode.
 func (t *Tracker) TableExists() (bool, error) {
-	query := t.grammar.CompileHasTable(t.tableName)
+	schemaName, table := schema.SplitQualified(t.tableName)
+	query := t.grammar.CompileHasTable(table)
+	if schemaName != "" {
+		query = t.grammar.CompileHasTableIn(schemaName, table)
+	}
 
 	var count int
 	if err := t.db.QueryRow(query).Scan(&count); err != nil {
@@ -71,11 +79,34 @@ func (t *Tracker) TableExists() (bool, error) {
 	return count > 0, nil
 }
 
+// quotedTable returns the (possibly schema-qualified) tracking table name
+// quoted for the dialect.
+func (t *Tracker) quotedTable() string {
+	return schema.QuoteQualified(t.grammar, t.tableName)
+}
+
+// isQualified reports whether the tracking table name names a schema.
+func (t *Tracker) isQualified() bool {
+	s, _ := schema.SplitQualified(t.tableName)
+	return s != ""
+}
+
+// dropTable drops the tracking table if it exists. Fresh uses it for a
+// schema-qualified tracking table, which the grammar's drop-all statements
+// (limited to the default schema) do not reach.
+func (t *Tracker) dropTable(ex schema.Executor) error {
+	query := "DROP TABLE IF EXISTS " + t.quotedTable()
+	if _, err := ex.Exec(query); err != nil {
+		return fmt.Errorf("drop tracking table %q: %w: %w", t.tableName, ErrTrackingTable, err)
+	}
+	return nil
+}
+
 // GetApplied returns all migration records ordered by name ascending.
 func (t *Tracker) GetApplied() ([]MigrationRecord, error) {
 	query := fmt.Sprintf(
 		`SELECT migration, batch, created_at FROM %s ORDER BY migration ASC`,
-		t.tableName,
+		t.quotedTable(),
 	)
 
 	rows, err := t.db.Query(query)
@@ -92,7 +123,7 @@ func (t *Tracker) GetApplied() ([]MigrationRecord, error) {
 func (t *Tracker) GetByBatch(batch int) ([]MigrationRecord, error) {
 	query := fmt.Sprintf(
 		`SELECT migration, batch, created_at FROM %s WHERE batch = %s ORDER BY migration ASC`,
-		t.tableName, t.grammar.Placeholder(1),
+		t.quotedTable(), t.grammar.Placeholder(1),
 	)
 
 	rows, err := t.db.Query(query, batch)
@@ -127,7 +158,7 @@ func scanRecords(rows *sql.Rows) ([]MigrationRecord, error) {
 func (t *Tracker) GetLastBatchNumber() (int, error) {
 	query := fmt.Sprintf(
 		`SELECT COALESCE(MAX(batch), 0) FROM %s`,
-		t.tableName,
+		t.quotedTable(),
 	)
 
 	var batch int
@@ -148,7 +179,7 @@ func (t *Tracker) Record(name string, batch int) error {
 func (t *Tracker) RecordTx(ex schema.Executor, name string, batch int) error {
 	query := fmt.Sprintf(
 		`INSERT INTO %s (migration, batch) VALUES (%s, %s)`,
-		t.tableName, t.grammar.Placeholder(1), t.grammar.Placeholder(2),
+		t.quotedTable(), t.grammar.Placeholder(1), t.grammar.Placeholder(2),
 	)
 
 	if _, err := ex.Exec(query, name, batch); err != nil {
@@ -167,7 +198,7 @@ func (t *Tracker) Remove(name string) error {
 func (t *Tracker) RemoveTx(ex schema.Executor, name string) error {
 	query := fmt.Sprintf(
 		`DELETE FROM %s WHERE migration = %s`,
-		t.tableName, t.grammar.Placeholder(1),
+		t.quotedTable(), t.grammar.Placeholder(1),
 	)
 
 	if _, err := ex.Exec(query, name); err != nil {

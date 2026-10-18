@@ -443,6 +443,9 @@ func (m *Migrator) Refresh() error {
 // In dry-run mode the (read-only) list query still runs so the printed DROP
 // statements are accurate, but nothing is dropped.
 //
+// Only the default schema is cleared; a schema-qualified tracking table
+// (WithTableName("app.migrations")) is dropped explicitly afterwards.
+//
 // The migration lock is acquired before anything is dropped and held until
 // the migrations have run.
 func (m *Migrator) Fresh() error {
@@ -453,6 +456,15 @@ func (m *Migrator) Fresh() error {
 	return m.withLock(func() error {
 		if err := m.dropAllTables(); err != nil {
 			return err
+		}
+
+		// A schema-qualified tracking table ("app.migrations") lives outside
+		// the default schema that dropAllTables clears, so it would survive
+		// with its rows and Up would find nothing pending. Drop it as well.
+		if !m.dryRun && m.tracker.isQualified() {
+			if err := m.tracker.dropTable(m.db); err != nil {
+				return err
+			}
 		}
 
 		// In dry-run nothing was dropped, so the existing tracking table must

@@ -30,13 +30,15 @@ func (d Dialect) placeholder(index int) string {
 	}
 }
 
-// quoteIdent returns the identifier quoting style for the dialect.
+// quoteIdent quotes name as an identifier for the dialect, doubling any
+// embedded delimiter (backticks on MySQL, double quotes on PostgreSQL and
+// SQLite).
 func (d Dialect) quoteIdent(name string) string {
 	switch d {
 	case DialectMySQL:
-		return "`" + name + "`"
+		return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 	default:
-		return `"` + name + `"`
+		return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 	}
 }
 

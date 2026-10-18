@@ -3,7 +3,6 @@ package migrator
 import (
 	"errors"
 
-	"github.com/gopackx/go-migration/pkg/config"
 	"github.com/gopackx/go-migration/pkg/database"
 	"github.com/gopackx/go-migration/pkg/schema/grammars"
 	"github.com/gopackx/go-migration/pkg/seeder"
@@ -15,7 +14,9 @@ import (
 //
 // Errors owned by another package are re-exported here as aliases of the
 // canonical value, so errors.Is(err, migrator.ErrSeederNotFound) and
-// errors.Is(err, seeder.ErrSeederNotFound) are equivalent.
+// errors.Is(err, seeder.ErrSeederNotFound) are equivalent. Configuration
+// errors are not re-exported: use config.ErrConfigValidation, so that the
+// library does not depend on the configuration loader.
 var (
 	ErrMigrationNotFound    = errors.New("migration not found")
 	ErrDuplicateMigration   = errors.New("duplicate migration name")
@@ -37,9 +38,6 @@ var (
 	ErrInvalidSeederName  = seeder.ErrInvalidSeederName
 	ErrCircularDependency = seeder.ErrCircularDependency
 	ErrSeederNotFound     = seeder.ErrSeederNotFound
-
-	// Alias of the pkg/config sentinel.
-	ErrConfigValidation = config.ErrConfigValidation
 
 	// Alias of the grammar sentinel returned for unsupported column types.
 	ErrUnsupportedType = grammars.ErrUnsupportedType

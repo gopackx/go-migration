@@ -155,12 +155,18 @@ func (g *PostgresGrammar) CompileRename(from, to string) string {
 
 // CompileHasTable generates a query to check if a table exists.
 func (g *PostgresGrammar) CompileHasTable(table string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s'", table)
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s", quoteString(table))
+}
+
+// CompileHasTableIn generates a query to check if a table exists in the given
+// schema.
+func (g *PostgresGrammar) CompileHasTableIn(schemaName, table string) string {
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s", quoteString(schemaName), quoteString(table))
 }
 
 // CompileHasColumn generates a query to check if a column exists in a table.
 func (g *PostgresGrammar) CompileHasColumn(table, column string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '%s' AND column_name = '%s'", table, column)
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = %s AND column_name = %s", quoteString(table), quoteString(column))
 }
 
 // CompileListTables generates a query listing all tables in the public schema.
@@ -178,14 +184,21 @@ func (g *PostgresGrammar) CompileDropAllTables(tables []string) []string {
 }
 
 // CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
-// the migration tracking table.
+// the migration tracking table. The table name may be schema-qualified and is
+// quoted with schema.QuoteQualified.
 func (g *PostgresGrammar) CompileTrackingTable(table string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id         SERIAL PRIMARY KEY,
 		migration  VARCHAR(255) NOT NULL UNIQUE,
 		batch      INTEGER NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`, table)
+	)`, schema.QuoteQualified(g, table))
+}
+
+// QuoteIdentifier quotes a table or column name for PostgreSQL: it is wrapped
+// in double quotes, and embedded double quotes are doubled.
+func (g *PostgresGrammar) QuoteIdentifier(name string) string {
+	return quote(name)
 }
 
 // Placeholder returns the PostgreSQL positional placeholder ($1, $2, ...).
@@ -258,7 +271,7 @@ func (g *PostgresGrammar) CompileColumnType(col schema.ColumnDefinition) (string
 		for i, v := range col.AllowedValues {
 			quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
 		}
-		return fmt.Sprintf(`VARCHAR(255) CHECK ("%s" IN (%s))`, col.Name, strings.Join(quoted, ",")), nil
+		return fmt.Sprintf(`VARCHAR(255) CHECK (%s IN (%s))`, quote(col.Name), strings.Join(quoted, ",")), nil
 	case schema.TypeChar:
 		length := col.Length
 		if length <= 0 {
@@ -324,9 +337,18 @@ func (g *PostgresGrammar) compileForeignKey(fk schema.ForeignKeyDefinition) stri
 	return sb.String()
 }
 
-// quote wraps an identifier in double quotes for PostgreSQL.
+// quote wraps an identifier in double quotes, doubling any embedded double
+// quote, as PostgreSQL and SQLite expect.
 func quote(name string) string {
-	return fmt.Sprintf(`"%s"`, name)
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+// quoteString returns s as a single-quoted SQL string literal, doubling any
+// embedded single quote. It is used where a name is compared as a value
+// (e.g. information_schema lookups) on PostgreSQL and SQLite, which treat
+// backslashes in string literals literally.
+func quoteString(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // quoteSlice quotes each element in a string slice.

@@ -156,12 +156,19 @@ func (g *SQLiteGrammar) CompileRename(from, to string) string {
 
 // CompileHasTable generates a query to check if a table exists using sqlite_master.
 func (g *SQLiteGrammar) CompileHasTable(table string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'", table)
+	return fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=%s", quoteString(table))
+}
+
+// CompileHasTableIn generates a query to check if a table exists in the given
+// database ("main", "temp" or an attached database), by reading that
+// database's sqlite_master.
+func (g *SQLiteGrammar) CompileHasTableIn(schemaName, table string) string {
+	return fmt.Sprintf("SELECT COUNT(*) FROM %s.sqlite_master WHERE type='table' AND name=%s", quote(schemaName), quoteString(table))
 }
 
 // CompileHasColumn generates a PRAGMA table_info query to check column existence.
 func (g *SQLiteGrammar) CompileHasColumn(table, column string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, column)
+	return fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info(%s) WHERE name=%s", quoteString(table), quoteString(column))
 }
 
 // CompileListTables generates a query listing all user tables (excluding
@@ -183,14 +190,21 @@ func (g *SQLiteGrammar) CompileDropAllTables(tables []string) []string {
 }
 
 // CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
-// the migration tracking table.
+// the migration tracking table. The table name may be qualified with an
+// attached database name and is quoted with schema.QuoteQualified.
 func (g *SQLiteGrammar) CompileTrackingTable(table string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		migration  VARCHAR(255) NOT NULL UNIQUE,
 		batch      INTEGER NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`, table)
+	)`, schema.QuoteQualified(g, table))
+}
+
+// QuoteIdentifier quotes a table or column name for SQLite: it is wrapped in
+// double quotes, and embedded double quotes are doubled.
+func (g *SQLiteGrammar) QuoteIdentifier(name string) string {
+	return quote(name)
 }
 
 // Placeholder returns the SQLite placeholder ("?").
@@ -250,7 +264,7 @@ func (g *SQLiteGrammar) CompileColumnType(col schema.ColumnDefinition) (string, 
 		for i, v := range col.AllowedValues {
 			quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
 		}
-		return fmt.Sprintf(`TEXT CHECK ("%s" IN (%s))`, col.Name, strings.Join(quoted, ",")), nil
+		return fmt.Sprintf(`TEXT CHECK (%s IN (%s))`, quote(col.Name), strings.Join(quoted, ",")), nil
 	case schema.TypeChar:
 		return "TEXT", nil
 	case schema.TypeLongText:

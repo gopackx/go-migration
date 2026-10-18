@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gopackx/go-migration/pkg/config"
 	"github.com/gopackx/go-migration/pkg/database"
 	"github.com/gopackx/go-migration/pkg/schema/grammars"
 	"github.com/gopackx/go-migration/pkg/seeder"
@@ -26,7 +25,6 @@ func TestSentinelErrors_ImplementErrorInterface(t *testing.T) {
 		ErrSeederNotFound,
 		ErrUnsupportedType,
 		ErrConnectionNotFound,
-		ErrConfigValidation,
 	}
 
 	for _, sentinel := range sentinels {
@@ -50,7 +48,6 @@ func TestSentinelErrors_UniqueMessages(t *testing.T) {
 		ErrSeederNotFound,
 		ErrUnsupportedType,
 		ErrConnectionNotFound,
-		ErrConfigValidation,
 	}
 
 	seen := make(map[string]bool)
@@ -80,7 +77,6 @@ func TestSentinelErrors_ErrorsIs(t *testing.T) {
 		{"ErrSeederNotFound", ErrSeederNotFound},
 		{"ErrUnsupportedType", ErrUnsupportedType},
 		{"ErrConnectionNotFound", ErrConnectionNotFound},
-		{"ErrConfigValidation", ErrConfigValidation},
 	}
 
 	for _, tt := range tests {
@@ -131,7 +127,6 @@ func TestSentinelErrors_AliasCanonicalValues(t *testing.T) {
 		{"ErrInvalidSeederName", ErrInvalidSeederName, seeder.ErrInvalidSeederName},
 		{"ErrCircularDependency", ErrCircularDependency, seeder.ErrCircularDependency},
 		{"ErrSeederNotFound", ErrSeederNotFound, seeder.ErrSeederNotFound},
-		{"ErrConfigValidation", ErrConfigValidation, config.ErrConfigValidation},
 		{"ErrUnsupportedType", ErrUnsupportedType, grammars.ErrUnsupportedType},
 	}
 	for _, tt := range tests {

@@ -29,7 +29,7 @@ func TestEnsureTable_Success(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"migrations\"").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	tracker := NewTracker(db, "migrations")
@@ -49,7 +49,7 @@ func TestEnsureTable_Error(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"migrations\"").
 		WillReturnError(errors.New("db error"))
 
 	tracker := NewTracker(db, "migrations")
@@ -69,7 +69,7 @@ func TestEnsureTable_CustomTableName(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS custom_migrations").
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"custom_migrations\"").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	tracker := NewTracker(db, "custom_migrations")
@@ -94,7 +94,7 @@ func TestGetApplied_Success(t *testing.T) {
 		AddRow("20240115000000_first", 1, now).
 		AddRow("20240215000000_second", 1, now)
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnRows(rows)
 
 	tracker := NewTracker(db, "migrations")
@@ -127,7 +127,7 @@ func TestGetApplied_Empty(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"migration", "batch", "created_at"})
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" ORDER BY migration ASC").
 		WillReturnRows(rows)
 
 	tracker := NewTracker(db, "migrations")
@@ -147,7 +147,7 @@ func TestGetApplied_QueryError(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\"").
 		WillReturnError(errors.New("db error"))
 
 	tracker := NewTracker(db, "migrations")
@@ -172,7 +172,7 @@ func TestGetByBatch_Success(t *testing.T) {
 		AddRow("20240115000000_first", 2, now).
 		AddRow("20240215000000_second", 2, now)
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1 ORDER BY migration ASC").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1 ORDER BY migration ASC").
 		WithArgs(2).
 		WillReturnRows(rows)
 
@@ -203,7 +203,7 @@ func TestGetByBatch_Empty(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"migration", "batch", "created_at"})
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1").
 		WithArgs(99).
 		WillReturnRows(rows)
 
@@ -224,7 +224,7 @@ func TestGetByBatch_QueryError(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1").
 		WithArgs(1).
 		WillReturnError(errors.New("db error"))
 
@@ -246,7 +246,7 @@ func TestGetLastBatchNumber_WithRecords(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"max"}).AddRow(3)
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(rows)
 
 	tracker := NewTracker(db, "migrations")
@@ -267,7 +267,7 @@ func TestGetLastBatchNumber_NoRecords(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"max"}).AddRow(0)
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnRows(rows)
 
 	tracker := NewTracker(db, "migrations")
@@ -287,7 +287,7 @@ func TestGetLastBatchNumber_Error(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM migrations").
+	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(batch\\), 0\\) FROM \"migrations\"").
 		WillReturnError(errors.New("db error"))
 
 	tracker := NewTracker(db, "migrations")
@@ -307,7 +307,7 @@ func TestRecord_Success(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("INSERT INTO migrations").
+	mock.ExpectExec("INSERT INTO \"migrations\"").
 		WithArgs("20240115000000_create_users", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -328,7 +328,7 @@ func TestRecord_Error(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("INSERT INTO migrations").
+	mock.ExpectExec("INSERT INTO \"migrations\"").
 		WithArgs("20240115000000_create_users", 1).
 		WillReturnError(errors.New("duplicate key"))
 
@@ -352,7 +352,7 @@ func TestRemove_Success(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("DELETE FROM migrations WHERE migration = \\$1").
+	mock.ExpectExec("DELETE FROM \"migrations\" WHERE migration = \\$1").
 		WithArgs("20240115000000_create_users").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -373,7 +373,7 @@ func TestRemove_Error(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectExec("DELETE FROM migrations WHERE migration = \\$1").
+	mock.ExpectExec("DELETE FROM \"migrations\" WHERE migration = \\$1").
 		WithArgs("20240115000000_create_users").
 		WillReturnError(errors.New("db error"))
 

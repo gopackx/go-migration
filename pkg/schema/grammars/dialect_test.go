@@ -177,17 +177,17 @@ func TestCompileTrackingTable(t *testing.T) {
 	}{
 		{
 			"postgres", NewPostgresGrammar(),
-			[]string{"id         SERIAL PRIMARY KEY", "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
+			[]string{`CREATE TABLE IF NOT EXISTS "schema_migrations" (`, "id         SERIAL PRIMARY KEY", "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
 			[]string{"AUTO_INCREMENT", "AUTOINCREMENT"},
 		},
 		{
 			"mysql", NewMySQLGrammar(),
-			[]string{"id         INT AUTO_INCREMENT PRIMARY KEY", "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
+			[]string{"CREATE TABLE IF NOT EXISTS `schema_migrations` (", "id         INT AUTO_INCREMENT PRIMARY KEY", "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
 			[]string{"SERIAL", "AUTOINCREMENT"},
 		},
 		{
 			"sqlite", NewSQLiteGrammar(),
-			[]string{"id         INTEGER PRIMARY KEY AUTOINCREMENT", "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"},
+			[]string{`CREATE TABLE IF NOT EXISTS "schema_migrations" (`, "id         INTEGER PRIMARY KEY AUTOINCREMENT", "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"},
 			[]string{"SERIAL", "AUTO_INCREMENT"},
 		},
 	}
@@ -195,7 +195,6 @@ func TestCompileTrackingTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			q := tt.grammar.CompileTrackingTable("schema_migrations")
 			common := []string{
-				"CREATE TABLE IF NOT EXISTS schema_migrations (",
 				"migration  VARCHAR(255) NOT NULL UNIQUE",
 				"batch      INTEGER NOT NULL",
 			}

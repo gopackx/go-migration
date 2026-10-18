@@ -258,8 +258,14 @@ func TestScaffold_CreatesFiles(t *testing.T) {
 	if !strings.Contains(mainStr, `_ "github.com/user/myapp/database/seeders"`) {
 		t.Error("main.go missing seeders import")
 	}
-	if !strings.Contains(mainStr, "migrator.Run()") {
-		t.Error("main.go missing migrator.Run() call")
+	if !strings.Contains(mainStr, "app.Run()") {
+		t.Error("main.go missing app.Run() call")
+	}
+	if !strings.Contains(mainStr, `"github.com/gopackx/go-migration/pkg/cli/app"`) {
+		t.Error("main.go missing the pkg/cli/app import")
+	}
+	if strings.Contains(mainStr, "pkg/migrator\"") {
+		t.Error("main.go still imports pkg/migrator")
 	}
 
 	// Verify config content
@@ -352,7 +358,7 @@ func TestScaffold_ForceOverwritesExistingFiles(t *testing.T) {
 
 	// Verify content was overwritten with template output
 	mainContent, _ := os.ReadFile(filepath.Join(dir, "cmd", "migrator", "main.go"))
-	if !strings.Contains(string(mainContent), "migrator.Run()") {
+	if !strings.Contains(string(mainContent), "app.Run()") {
 		t.Error("main.go was not overwritten with template content")
 	}
 

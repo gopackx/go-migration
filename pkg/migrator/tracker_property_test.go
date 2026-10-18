@@ -25,7 +25,7 @@ func TestProperty12_EnsureTableIsIdempotent(t *testing.T) {
 
 		// Expect EnsureTable to be called n times, all succeeding.
 		for i := 0; i < n; i++ {
-			mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"migrations\"").
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		}
 
@@ -90,7 +90,7 @@ func TestProperty14_QueryByBatchReturnsCorrectSubset(t *testing.T) {
 			rows.AddRow(r.name, r.batch, now)
 		}
 
-		mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations WHERE batch = \\$1 ORDER BY migration ASC").
+		mock.ExpectQuery("SELECT migration, batch, created_at FROM \"migrations\" WHERE batch = \\$1 ORDER BY migration ASC").
 			WithArgs(targetBatch).
 			WillReturnRows(rows)
 

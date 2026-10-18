@@ -22,15 +22,15 @@ func TestTracker_MySQLGrammar_UsesQuestionMarkPlaceholders(t *testing.T) {
 
 	tr := NewTrackerWithGrammar(db, "migrations", grammars.NewMySQLGrammar())
 
-	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS migrations \(\s*id\s+INT AUTO_INCREMENT PRIMARY KEY`).
+	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS \x60migrations\x60 \(\s*id\s+INT AUTO_INCREMENT PRIMARY KEY`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT migration, batch, created_at FROM migrations WHERE batch = ? ORDER BY migration ASC")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT migration, batch, created_at FROM `migrations` WHERE batch = ? ORDER BY migration ASC")).
 		WithArgs(3).
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO migrations (migration, batch) VALUES (?, ?)")).
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `migrations` (migration, batch) VALUES (?, ?)")).
 		WithArgs("20240101000000_create_users", 3).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM migrations WHERE migration = ?")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `migrations` WHERE migration = ?")).
 		WithArgs("20240101000000_create_users").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -56,9 +56,9 @@ func TestTracker_SQLiteGrammar_TrackingTableDDL(t *testing.T) {
 	defer db.Close()
 
 	tr := NewTrackerWithGrammar(db, "migrations", grammars.NewSQLiteGrammar())
-	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS migrations \(\s*id\s+INTEGER PRIMARY KEY AUTOINCREMENT`).
+	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS "migrations" \(\s*id\s+INTEGER PRIMARY KEY AUTOINCREMENT`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO migrations (migration, batch) VALUES (?, ?)")).
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO \"migrations\" (migration, batch) VALUES (?, ?)")).
 		WithArgs("x", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -79,7 +79,7 @@ func TestNewTracker_DefaultsToPostgres(t *testing.T) {
 
 	tr := NewTracker(db, "migrations")
 	mock.ExpectExec(`SERIAL PRIMARY KEY`).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO migrations (migration, batch) VALUES ($1, $2)")).
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO \"migrations\" (migration, batch) VALUES ($1, $2)")).
 		WithArgs("x", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -102,7 +102,7 @@ func TestTracker_GetApplied_ScansTextTimestamps(t *testing.T) {
 
 	tr := NewTrackerWithGrammar(db, "migrations", grammars.NewMySQLGrammar())
 	now := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
-	mock.ExpectQuery("SELECT migration, batch, created_at FROM migrations").
+	mock.ExpectQuery("SELECT migration, batch, created_at FROM `migrations`").
 		WillReturnRows(sqlmock.NewRows([]string{"migration", "batch", "created_at"}).
 			AddRow("a", 1, []byte("2024-01-02 03:04:05")).
 			AddRow("b", 1, "2024-01-02T03:04:05Z").
@@ -197,7 +197,7 @@ func TestNew_GrammarReachesTracker_AnyOptionOrder(t *testing.T) {
 			defer db.Close()
 
 			m := New(db, opts...)
-			mock.ExpectExec(`CREATE TABLE IF NOT EXISTS schema_migrations .*INT AUTO_INCREMENT PRIMARY KEY`).
+			mock.ExpectExec(`CREATE TABLE IF NOT EXISTS \x60schema_migrations\x60 .*INT AUTO_INCREMENT PRIMARY KEY`).
 				WillReturnResult(sqlmock.NewResult(0, 0))
 			if err := m.tracker.EnsureTable(); err != nil {
 				t.Fatalf("EnsureTable: %v", err)
@@ -315,7 +315,7 @@ func TestUp_RecordFailure_RollsBackMigrationTx(t *testing.T) {
 	expectGetApplied(mock, nil)
 	expectMaxBatch(mock, 0)
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO migrations").
+	mock.ExpectExec("INSERT INTO \"migrations\"").
 		WithArgs("20240101000000_create_users", 1).
 		WillReturnError(errors.New("duplicate key"))
 	mock.ExpectRollback()
@@ -345,7 +345,7 @@ func TestRollback_RemoveFailure_RollsBackMigrationTx(t *testing.T) {
 		{Name: "20240101000000_create_users", Batch: 1, CreatedAt: time.Now()},
 	})
 	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM migrations").
+	mock.ExpectExec("DELETE FROM \"migrations\"").
 		WithArgs("20240101000000_create_users").
 		WillReturnError(errors.New("lock timeout"))
 	mock.ExpectRollback()

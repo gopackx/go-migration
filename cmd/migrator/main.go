@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/gopackx/go-migration/pkg/migrator"
+	"github.com/gopackx/go-migration/pkg/cli/app"
 
 	// Database drivers — blank imports register them with database/sql.
 	_ "github.com/go-sql-driver/mysql"
@@ -14,5 +14,5 @@ import (
 )
 
 func main() {
-	migrator.Run()
+	app.Run()
 }

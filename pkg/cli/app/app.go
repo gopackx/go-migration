@@ -1,4 +1,29 @@
-package migrator
+// Package app is the go-migration command-line application: it parses the
+// command line, loads the configuration, opens the database connections,
+// registers the auto-discovered migrations and seeders, and dispatches the
+// command.
+//
+// It lives outside pkg/migrator so that importing the migrator library does
+// not pull in the CLI, the config loader, the code generator or the YAML
+// parser. A project's migration binary is typically just:
+//
+//	package main
+//
+//	import (
+//	    _ "github.com/go-sql-driver/mysql"
+//	    _ "github.com/lib/pq"
+//	    _ "modernc.org/sqlite"
+//
+//	    _ "myapp/database/migrations"
+//	    _ "myapp/database/seeders"
+//
+//	    "github.com/gopackx/go-migration/pkg/cli/app"
+//	)
+//
+//	func main() {
+//	    app.Run()
+//	}
+package app
 
 import (
 	"context"
@@ -15,11 +40,12 @@ import (
 	"github.com/gopackx/go-migration/pkg/config"
 	"github.com/gopackx/go-migration/pkg/database"
 	"github.com/gopackx/go-migration/pkg/database/drivers"
+	"github.com/gopackx/go-migration/pkg/migrator"
 	"github.com/gopackx/go-migration/pkg/seeder"
 )
 
 // commandsNeedingDB lists commands that require a database connection.
-// Commands not in this set (version, help, make:migration, make:seeder,
+// Commands not in this set (version, help, init, make:migration, make:seeder,
 // make:factory) skip the database setup entirely.
 var commandsNeedingDB = map[string]bool{
 	"migrate":          true,
@@ -34,27 +60,15 @@ var commandsNeedingDB = map[string]bool{
 	"db:seed:truncate": true,
 }
 
-// migratorAdapter wraps *Migrator to satisfy commands.MigratorRunner.
-// This adapter converts []MigrationStatus to []commands.MigrationStatusInfo
-// in the Status() method, bridging the two packages without a direct import
-// from commands to migrator.
-type migratorAdapter struct {
-	m *Migrator
-}
-
-func (a *migratorAdapter) Up() error                { return a.m.Up() }
-func (a *migratorAdapter) Rollback(steps int) error { return a.m.Rollback(steps) }
-func (a *migratorAdapter) Reset() error             { return a.m.Reset() }
-func (a *migratorAdapter) Refresh() error           { return a.m.Refresh() }
-func (a *migratorAdapter) Fresh() error             { return a.m.Fresh() }
-
-// migrationLocker adapts Migrator.Lock to commands.Locker for the db:seed*
-// commands, so seeders are serialised with each other and with migrations.
-// As in the Migrator's own operations, a failure to release the lock is only
-// logged: the lock connection has then been discarded, which releases the
-// lock on the server.
+// migrationLocker adapts Migrator.Lock to commands.Locker for the commands
+// that do not go through the Migrator's own locking (migrate:install and the
+// db:seed* commands), so they are serialised with each other and with
+// migrations. As in the Migrator's own operations, a failure to release the
+// lock is only logged: the lock connection has then been discarded, which
+// releases the lock on the server.
 type migrationLocker struct {
-	m *Migrator
+	m   *migrator.Migrator
+	log logger.Logger
 }
 
 func (l *migrationLocker) Lock() (func() error, error) {
@@ -63,48 +77,17 @@ func (l *migrationLocker) Lock() (func() error, error) {
 		return nil, err
 	}
 	return func() error {
-		if err := release(); err != nil && l.m.logger != nil {
-			l.m.logger.Error("%v", err)
+		if err := release(); err != nil && l.log != nil {
+			l.log.Error("%v", err)
 		}
 		return nil
 	}, nil
 }
 
-func (a *migratorAdapter) Status() ([]commands.MigrationStatusInfo, error) {
-	statuses, err := a.m.Status()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]commands.MigrationStatusInfo, len(statuses))
-	for i, s := range statuses {
-		result[i] = commands.MigrationStatusInfo{
-			Name:      s.Name,
-			Applied:   s.Applied,
-			Batch:     s.Batch,
-			AppliedAt: s.AppliedAt,
-		}
-	}
-	return result, nil
-}
-
 // Run is the all-in-one entry point for the go-migration CLI.
 // It handles the full lifecycle: parse CLI args, load config, connect DB,
 // auto-discover migrations and seeders, and dispatch the command.
-// On fatal error it prints to stderr and exits with code 1.
-//
-// Usage in main.go:
-//
-//	package main
-//
-//	import (
-//	    _ "myapp/migrations"
-//	    _ "myapp/seeders"
-//	    "github.com/gopackx/go-migration/pkg/migrator"
-//	)
-//
-//	func main() {
-//	    migrator.Run()
-//	}
+// On error it prints to stderr and exits with code 1.
 func Run() {
 	if err := run(); err != nil {
 		if errors.Is(err, commands.ErrPendingMigrations) {
@@ -120,8 +103,8 @@ func Run() {
 
 // run implements the full CLI lifecycle and returns an error for testability.
 func run() error {
-	app := cli.NewApp(nil)
-	router := app.Router()
+	cliApp := cli.NewApp(nil)
+	router := cliApp.Router()
 
 	// cmdCtx is populated lazily by the pre-run hook for commands that need DB.
 	var cmdCtx *commands.CommandContext
@@ -220,37 +203,37 @@ func run() error {
 
 		// Resolve grammar from default connection driver.
 		connCfg := cfg.Connections[cfg.DefaultConn]
-		grammar, err := ResolveGrammar(connCfg.Driver)
+		grammar, err := migrator.ResolveGrammar(connCfg.Driver)
 		if err != nil {
 			return fmt.Errorf("resolve grammar for driver %q: %w", connCfg.Driver, err)
 		}
 
 		// Build Migrator options.
-		opts := []Option{
-			WithTableName(cfg.MigrationTable),
-			WithLogger(log),
-			WithGrammar(grammar),
+		opts := []migrator.Option{
+			migrator.WithTableName(cfg.MigrationTable),
+			migrator.WithLogger(log),
+			migrator.WithGrammar(grammar),
 		}
 
 		// Enable dry-run mode if the command has --dry-run flag set.
 		dryRunFlag := flags.Lookup("dry-run")
 		if dryRunFlag != nil && dryRunFlag.Value.String() == "true" {
-			opts = append(opts, WithDryRun(os.Stdout))
+			opts = append(opts, migrator.WithDryRun(os.Stdout))
 		}
 
 		// Migration lock settings (--lock-timeout, --no-lock) on the commands
 		// that change the database.
-		lockOpts, err := lockOptions(flags)
+		lock, err := lockSettingsFromFlags(flags)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, lockOpts...)
+		opts = append(opts, lock.options()...)
 
 		// Create Migrator with auto-discover.
-		m := New(db, opts...)
+		m := migrator.New(db, opts...)
 
 		// Auto-discover migrations from global auto-registry.
-		autoMigrations := GetAutoRegistered()
+		autoMigrations := migrator.GetAutoRegistered()
 		for _, rm := range autoMigrations {
 			if err := m.Register(rm.Name, rm.Migration); err != nil {
 				return fmt.Errorf("register migration %q: %w", rm.Name, err)
@@ -273,22 +256,22 @@ func run() error {
 
 		// Create Tracker for migrate:install command, using the connection's
 		// dialect for the tracking table DDL.
-		tracker := NewTrackerWithGrammar(db, cfg.MigrationTable, grammar)
+		tracker := migrator.NewTrackerWithGrammar(db, cfg.MigrationTable, grammar)
 
 		cmdCtx = &commands.CommandContext{
 			DB:             db,
-			Migrator:       &migratorAdapter{m: m},
+			Migrator:       m,
 			Seeder:         seederRunner,
 			Generator:      gen,
 			TrackerEnsurer: tracker,
-			Locker:         &migrationLocker{m: m},
+			Locker:         &migrationLocker{m: m, log: log},
 		}
 
 		return nil
 	})
 
 	// Run the CLI.
-	err := app.Run(nil)
+	err := cliApp.Run(nil)
 
 	// Cleanup: close all database connections.
 	if connManager != nil {
@@ -298,25 +281,46 @@ func run() error {
 	return err
 }
 
-// lockOptions converts the --lock-timeout and --no-lock flags, when the
-// command defines them, into Migrator options.
-func lockOptions(flags *flag.FlagSet) ([]Option, error) {
-	var opts []Option
+// lockSettings holds the --lock-timeout and --no-lock values of a command.
+type lockSettings struct {
+	// timeout is the --lock-timeout value; nil when the command has no lock
+	// flags (the Migrator default, migrator.DefaultLockTimeout, then applies).
+	timeout *time.Duration
+	// disabled is true when --no-lock was given.
+	disabled bool
+}
+
+// lockSettingsFromFlags reads the --lock-timeout and --no-lock flags, when
+// the command defines them.
+func lockSettingsFromFlags(flags *flag.FlagSet) (lockSettings, error) {
+	var s lockSettings
 	if f := flags.Lookup(commands.LockTimeoutFlag); f != nil {
 		getter, ok := f.Value.(flag.Getter)
 		if !ok {
-			return nil, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
+			return s, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
 		}
 		d, ok := getter.Get().(time.Duration)
 		if !ok {
-			return nil, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
+			return s, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
 		}
-		opts = append(opts, WithLockTimeout(d))
+		s.timeout = &d
 	}
 	if f := flags.Lookup(commands.NoLockFlag); f != nil && f.Value.String() == "true" {
-		opts = append(opts, WithoutLock())
+		s.disabled = true
 	}
-	return opts, nil
+	return s, nil
+}
+
+// options converts the settings into Migrator options.
+func (s lockSettings) options() []migrator.Option {
+	var opts []migrator.Option
+	if s.timeout != nil {
+		opts = append(opts, migrator.WithLockTimeout(*s.timeout))
+	}
+	if s.disabled {
+		opts = append(opts, migrator.WithoutLock())
+	}
+	return opts
 }
 
 // seederDialect maps a configured driver name to the seeder SQL dialect.

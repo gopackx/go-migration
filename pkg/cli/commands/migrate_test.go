@@ -5,6 +5,8 @@ import (
 	"flag"
 	"strings"
 	"testing"
+
+	"github.com/gopackx/go-migration/pkg/migrator"
 )
 
 // --- NewMigrateCommand ---
@@ -240,7 +242,7 @@ func TestAllMigrateCommands_HaveHelpText(t *testing.T) {
 // stubMigratorFn with configurable callbacks for testing
 type stubMigratorFn struct {
 	rollbackFn func(int) error
-	statusFn   func() ([]MigrationStatusInfo, error)
+	statusFn   func() ([]migrator.MigrationStatus, error)
 }
 
 func (s stubMigratorFn) Up() error { return nil }
@@ -253,7 +255,7 @@ func (s stubMigratorFn) Rollback(steps int) error {
 func (s stubMigratorFn) Reset() error   { return nil }
 func (s stubMigratorFn) Refresh() error { return nil }
 func (s stubMigratorFn) Fresh() error   { return nil }
-func (s stubMigratorFn) Status() ([]MigrationStatusInfo, error) {
+func (s stubMigratorFn) Status() ([]migrator.MigrationStatus, error) {
 	if s.statusFn != nil {
 		return s.statusFn()
 	}

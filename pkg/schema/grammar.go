@@ -24,8 +24,15 @@ type Grammar interface {
 	// CompileRename generates a RENAME TABLE statement.
 	CompileRename(from, to string) string
 
-	// CompileHasTable generates a query to check if a table exists.
+	// CompileHasTable generates a query to check if a table exists. The name
+	// is a single identifier, looked up in the default schema.
 	CompileHasTable(table string) string
+
+	// CompileHasTableIn generates a query to check if table exists in the
+	// given schema (PostgreSQL schema, MySQL database, SQLite attached
+	// database name such as "main"). It is used for a schema-qualified
+	// tracking table name (see QuoteQualified / SplitQualified).
+	CompileHasTableIn(schema, table string) string
 
 	// CompileHasColumn generates a query to check if a column exists in a table.
 	CompileHasColumn(table, column string) string
@@ -43,8 +50,16 @@ type Grammar interface {
 
 	// CompileTrackingTable generates a CREATE TABLE IF NOT EXISTS statement for
 	// the migration tracking table with the columns id, migration (unique),
-	// batch and created_at.
+	// batch and created_at. The table name may be schema-qualified
+	// ("app.migrations") and must be quoted with QuoteQualified.
 	CompileTrackingTable(table string) string
+
+	// QuoteIdentifier returns name quoted as a single identifier (table or
+	// column name) for the dialect, escaping any embedded quote character by
+	// doubling it: "a""b" on PostgreSQL and SQLite, `a``b` on MySQL. The name
+	// is treated as one identifier: a dot is part of the name, not a schema
+	// separator.
+	QuoteIdentifier(name string) string
 
 	// Placeholder returns the bind-parameter placeholder for the given 1-based
 	// parameter index (e.g. "$1" for PostgreSQL, "?" for MySQL and SQLite).

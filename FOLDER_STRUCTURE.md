@@ -13,7 +13,7 @@ go-migration/
 │       └── ci.yml                    # go vet, unit tests, integration tests (Postgres 16, MySQL 8, SQLite)
 │
 ├── cmd/
-│   └── migrator/                     # CLI entry point (blank-imports the DB drivers, calls migrator.Run)
+│   └── migrator/                     # CLI entry point (blank-imports the DB drivers, calls app.Run)
 │       ├── main.go
 │       └── version.go                # Version / BuildDate, set via -ldflags
 │
@@ -29,8 +29,7 @@ go-migration/
 │   │   ├── batch.go                  # Batch numbering and last-batch / last-N lookups
 │   │   ├── hooks.go                  # Before/after migration hooks
 │   │   ├── grammar_resolver.go       # Driver name -> Grammar (used by the CLI)
-│   │   ├── run.go                    # migrator.Run(): config loading, connections, CLI wiring
-│   │   ├── errors.go                 # Sentinel errors (and aliases of other packages' sentinels)
+│   │   ├── errors.go                 # Sentinel errors (and aliases of database/seeder/grammar sentinels)
 │   │   └── migration_error.go        # MigrationError (failing migration, SQL, cause)
 │   │
 │   ├── schema/                       # Schema builder
@@ -41,6 +40,7 @@ go-migration/
 │   │   ├── foreign_key.go            # Foreign key definitions
 │   │   ├── raw_expression.go         # Raw SQL default values (DefaultRaw)
 │   │   ├── grammar.go                # Grammar interface
+│   │   ├── qualified.go              # QuoteQualified / SplitQualified (schema-qualified tracking table)
 │   │   ├── dry_run_executor.go       # Executor that prints SQL instead of running it
 │   │   ├── recording_executor.go     # Executor wrapper that remembers the last SQL (for errors)
 │   │   └── grammars/                 # Dialect implementations
@@ -78,11 +78,13 @@ go-migration/
 │   │   └── interpolate.go            # ${ENV_VAR} interpolation
 │   │
 │   └── cli/                          # Command-line interface (hand-written router on the flag package)
-│       ├── app.go                    # App setup and command registration
+│       ├── app.go                    # App: router holder
 │       ├── router.go                 # Command router / help output
 │       ├── context.go                # Shared CLI context
+│       ├── app/
+│       │   └── app.go                # app.Run(): config loading, connections, auto-discovery, command wiring
 │       └── commands/                 # One file per command
-│           ├── context.go            # CommandContext passed to handlers (incl. Locker)
+│           ├── context.go            # CommandContext passed to handlers (Migrator, Locker, ...)
 │           ├── lock_flags.go         # --lock-timeout / --no-lock flags
 │           ├── confirm.go            # Confirmation prompt for destructive commands
 │           ├── init.go               # init
@@ -92,7 +94,7 @@ go-migration/
 │           ├── migrate_reset.go      # migrate:reset
 │           ├── migrate_refresh.go    # migrate:refresh
 │           ├── migrate_fresh.go      # migrate:fresh
-│           ├── migrate_install.go    # migrate:install
+│           ├── migrate_install.go    # migrate:install (takes the migration lock)
 │           ├── make_migration.go     # make:migration
 │           ├── make_seeder.go        # make:seeder
 │           ├── make_factory.go       # make:factory
@@ -126,6 +128,8 @@ go-migration/
 │   │   ├── migrations_test.go        # Migrations used by the scenarios
 │   │   ├── migrator_test.go          # Up/Status/Rollback/Reset/Refresh/Fresh, hooks, dry-run, transactions
 │   │   ├── lock_test.go              # Concurrent migrators, lock timeout, read-only Status
+│   │   ├── quoting_test.go           # Table/column/tracking-table names containing quote characters
+│   │   ├── qualified_test.go         # Tracking table in another schema/database (Postgres, MySQL)
 │   │   └── seeder_test.go            # Seeder dependency order, CreateManyWithDialect, Truncate
 │   ├── e2e/                          # (placeholder, empty)
 │   ├── fixtures/                     # (placeholder, empty)
@@ -155,13 +159,21 @@ Some packages also contain an empty `.gitkeep` file.
 
 ### `/cmd`
 The CLI binary. It only blank-imports the database drivers (and, in a user's
-project, the migrations/seeders packages) and calls `migrator.Run()`. No
-business logic lives here. `migrator init` generates an equivalent
+project, the migrations/seeders packages) and calls `app.Run()` from
+`pkg/cli/app`. No business logic lives here. `migrator init` generates an equivalent
 `cmd/migrator/main.go` in a user's project.
 
 ### `/pkg`
 The public, importable API: `migrator`, `schema` (+ `grammars`), `seeder`
-(+ `factory`), `database` (+ `drivers`), `config` and `cli`.
+(+ `factory`), `database` (+ `drivers`), `config` and `cli` (+ `app`,
+`commands`).
+
+Dependencies point from the CLI to the library, never the other way:
+`pkg/cli/app` and `pkg/cli/commands` import `pkg/migrator`, while
+`pkg/migrator` imports only `schema`, `grammars`, `seeder` and `database`.
+Importing the migrator as a library therefore does not pull in the CLI, the
+configuration loader, the code generator or the YAML parser
+(`go list -deps ./pkg/migrator` shows none of them).
 
 ### `/internal`
 Implementation details that other modules cannot import: the code generator
@@ -210,4 +222,5 @@ import "github.com/gopackx/go-migration/pkg/seeder"
 import "github.com/gopackx/go-migration/pkg/seeder/factory"
 import "github.com/gopackx/go-migration/pkg/database"
 import "github.com/gopackx/go-migration/pkg/database/drivers"
+import "github.com/gopackx/go-migration/pkg/cli/app" // the CLI: app.Run()
 ```
