@@ -16,9 +16,11 @@ func NewSQLiteDriver() *SQLiteDriver {
 	return &SQLiteDriver{}
 }
 
-// Name returns the driver name used for sql.Open registration.
+// Name returns the driver name used for sql.Open registration. The pure-Go
+// modernc.org/sqlite driver registers itself as "sqlite"; applications must
+// blank-import it (_ "modernc.org/sqlite").
 func (d *SQLiteDriver) Name() string {
-	return "sqlite3"
+	return "sqlite"
 }
 
 // Open creates a SQLite database connection using the provided config.

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: vet, unit and integration tests
+    runs-on: ubuntu-latest
+
+    env:
+      # The SQLite driver (modernc.org/sqlite) is pure Go; no C toolchain needed.
+      CGO_ENABLED: "0"
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gomigrate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gomigrate_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: gomigrate_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go vet (integration tag)
+        run: go vet -tags integration ./tests/integration/...
+
+      - name: Unit tests
+        run: go test -count=1 ./...
+
+      - name: Integration tests (SQLite, PostgreSQL, MySQL)
+        env:
+          GOMIGRATE_TEST_POSTGRES_DSN: "postgres://postgres:postgres@localhost:5432/gomigrate_test?sslmode=disable"
+          GOMIGRATE_TEST_MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/gomigrate_test?parseTime=true"
+        run: go test -count=1 -v -tags integration ./tests/integration/...

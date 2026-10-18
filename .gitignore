@@ -61,3 +61,6 @@ go.work.sum
 
 # Documentation build artifacts
 /docs/_build/
+
+# rapid property-test failure files (written locally when a property fails)
+**/testdata/rapid/

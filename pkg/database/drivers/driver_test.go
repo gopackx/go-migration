@@ -87,8 +87,9 @@ func TestMySQLDriver_BuildDSN(t *testing.T) {
 	}
 
 	dsn := d.buildDSN(config)
-	if "root:secret@tcp(localhost:3306)/mydb" != dsn {
-		t.Errorf("got %v, want %v", dsn, "root:secret@tcp(localhost:3306)/mydb")
+	want := "root:secret@tcp(localhost:3306)/mydb?parseTime=true"
+	if want != dsn {
+		t.Errorf("got %v, want %v", dsn, want)
 	}
 }
 
@@ -113,10 +114,53 @@ func TestMySQLDriver_BuildDSN_WithOptions(t *testing.T) {
 	}
 }
 
+func TestMySQLDriver_BuildDSN_WithOptionsAddsParseTime(t *testing.T) {
+	d := NewMySQLDriver()
+
+	config := database.ConnectionConfig{
+		Host:     "localhost",
+		Port:     3306,
+		Username: "root",
+		Password: "secret",
+		Database: "mydb",
+		Options:  map[string]string{"charset": "utf8mb4", "loc": "UTC"},
+	}
+
+	dsn := d.buildDSN(config)
+	want := "root:secret@tcp(localhost:3306)/mydb?charset=utf8mb4&loc=UTC&parseTime=true"
+	if want != dsn {
+		t.Errorf("got %v, want %v", dsn, want)
+	}
+}
+
+func TestMySQLDriver_BuildDSN_RespectsExplicitParseTime(t *testing.T) {
+	d := NewMySQLDriver()
+
+	for _, key := range []string{"parseTime", "parsetime"} {
+		config := database.ConnectionConfig{
+			Host:     "localhost",
+			Port:     3306,
+			Username: "root",
+			Password: "secret",
+			Database: "mydb",
+			Options:  map[string]string{key: "false"},
+		}
+
+		dsn := d.buildDSN(config)
+		want := "root:secret@tcp(localhost:3306)/mydb?" + key + "=false"
+		if want != dsn {
+			t.Errorf("got %v, want %v", dsn, want)
+		}
+		if strings.Contains(dsn, "parseTime=true") {
+			t.Errorf("explicit %s=false must not be overridden: %q", key, dsn)
+		}
+	}
+}
+
 func TestSQLiteDriver_Name(t *testing.T) {
 	d := NewSQLiteDriver()
-	if "sqlite3" != d.Name() {
-		t.Errorf("got %v, want %v", d.Name(), "sqlite3")
+	if "sqlite" != d.Name() {
+		t.Errorf("got %v, want %v", d.Name(), "sqlite")
 	}
 }
 

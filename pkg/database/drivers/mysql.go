@@ -3,6 +3,7 @@ package drivers
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/gopackx/go-migration/pkg/database"
@@ -37,19 +38,29 @@ func (d *MySQLDriver) Open(config database.ConnectionConfig) (*sql.DB, error) {
 }
 
 // buildDSN constructs a MySQL connection string from the config.
+//
+// parseTime=true is added unless the caller set parseTime explicitly in
+// Options: without it go-sql-driver/mysql returns DATETIME/TIMESTAMP columns
+// (including the migrations table's created_at) as []byte instead of
+// time.Time, which breaks scanning into time.Time.
 func (d *MySQLDriver) buildDSN(config database.ConnectionConfig) string {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
 		config.Username, config.Password, config.Host, config.Port, config.Database,
 	)
 
-	// Append options as query parameters
-	if len(config.Options) > 0 {
-		params := make([]string, 0, len(config.Options))
-		for key, val := range config.Options {
-			params = append(params, fmt.Sprintf("%s=%s", key, val))
+	hasParseTime := false
+	params := make([]string, 0, len(config.Options)+1)
+	for key, val := range config.Options {
+		if strings.EqualFold(key, "parseTime") {
+			hasParseTime = true
 		}
-		dsn += "?" + strings.Join(params, "&")
+		params = append(params, fmt.Sprintf("%s=%s", key, val))
 	}
+	if !hasParseTime {
+		params = append(params, "parseTime=true")
+	}
+	// Sort for a deterministic DSN (map iteration order is random).
+	sort.Strings(params)
 
-	return dsn
+	return dsn + "?" + strings.Join(params, "&")
 }
