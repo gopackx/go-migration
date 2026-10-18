@@ -18,16 +18,36 @@ type Runner struct {
 	registry *Registry
 	db       *sql.DB
 	logger   Logger
+	dialect  Dialect
+}
+
+// RunnerOption configures a Runner.
+type RunnerOption func(*Runner)
+
+// WithDialect sets the SQL dialect the Runner uses for the statements it
+// generates itself (currently Truncate's identifier quoting). The default is
+// DialectPostgres.
+func WithDialect(d Dialect) RunnerOption {
+	return func(r *Runner) {
+		r.dialect = d
+	}
 }
 
 // NewRunner creates a new seeder Runner.
 // The logger parameter may be nil, in which case logging is silently skipped.
-func NewRunner(registry *Registry, db *sql.DB, logger Logger) *Runner {
-	return &Runner{
+// Options such as WithDialect may follow; without them the PostgreSQL dialect
+// is used.
+func NewRunner(registry *Registry, db *sql.DB, logger Logger, opts ...RunnerOption) *Runner {
+	r := &Runner{
 		registry: registry,
 		db:       db,
 		logger:   logger,
+		dialect:  DialectPostgres,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // RunAll executes all registered seeders in dependency-resolved order.
@@ -149,9 +169,10 @@ func (r *Runner) Rollback(name string) error {
 }
 
 // Truncate deletes all rows from the specified table.
-// Uses DELETE FROM for broad database compatibility (including SQLite).
+// Uses DELETE FROM for broad database compatibility (including SQLite). The
+// table name is quoted for the Runner's dialect (see WithDialect).
 func (r *Runner) Truncate(table string) error {
-	query := fmt.Sprintf(`DELETE FROM "%s"`, table)
+	query := "DELETE FROM " + r.dialect.quoteIdent(table)
 	_, err := r.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("truncate table %q: %w", table, err)

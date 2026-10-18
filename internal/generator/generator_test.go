@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -274,5 +275,66 @@ func TestToStructName(t *testing.T) {
 				t.Errorf("got %v, want %v", toStructName(tt.input), tt.expected)
 			}
 		})
+	}
+}
+
+// Descriptions must be lower snake_case; anything else would produce a
+// migration name that migrator.AutoRegister rejects with a panic at init().
+func TestGenerator_RejectsInvalidDescriptions(t *testing.T) {
+	invalid := []string{
+		"CreateUsers",
+		"create-users",
+		"create users",
+		"1_create_users",
+		"_create_users",
+		"",
+		"create_Users",
+		"create.users",
+		"../evil",
+	}
+
+	for _, desc := range invalid {
+		t.Run(desc, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "out")
+			g := NewGenerator(dir)
+
+			calls := map[string]func() (string, error){
+				"migration": func() (string, error) { return g.Migration(desc, MigrationOptions{}) },
+				"seeder":    func() (string, error) { return g.Seeder(desc) },
+				"factory":   func() (string, error) { return g.Factory(desc) },
+			}
+			for kind, call := range calls {
+				path, err := call()
+				if err == nil {
+					t.Errorf("%s(%q): expected error, got path %q", kind, desc, path)
+					continue
+				}
+				if !errors.Is(err, ErrInvalidDescription) {
+					t.Errorf("%s(%q): error %v does not wrap ErrInvalidDescription", kind, desc, err)
+				}
+				if !strings.Contains(err.Error(), "snake_case") {
+					t.Errorf("%s(%q): error should explain the expected format: %v", kind, desc, err)
+				}
+			}
+			// Nothing may be written, not even the output directory.
+			if _, err := os.Stat(dir); !os.IsNotExist(err) {
+				t.Errorf("output dir should not be created for invalid description %q", desc)
+			}
+		})
+	}
+}
+
+func TestGenerator_AcceptsSnakeCaseDescriptions(t *testing.T) {
+	for _, desc := range []string{"create_users", "add_2fa_to_users", "x", "create_users_table_v2"} {
+		g, _ := fixedTimeGenerator(t)
+		if _, err := g.Migration(desc, MigrationOptions{}); err != nil {
+			t.Errorf("Migration(%q): unexpected error: %v", desc, err)
+		}
+		if _, err := g.Seeder(desc); err != nil {
+			t.Errorf("Seeder(%q): unexpected error: %v", desc, err)
+		}
+		if _, err := g.Factory(desc); err != nil {
+			t.Errorf("Factory(%q): unexpected error: %v", desc, err)
+		}
 	}
 }

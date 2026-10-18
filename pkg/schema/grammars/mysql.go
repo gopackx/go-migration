@@ -16,10 +16,11 @@ func NewMySQLGrammar() *MySQLGrammar {
 }
 
 // CompileCreate generates a CREATE TABLE statement from the given Blueprint.
-func (g *MySQLGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
+// MySQL declares every index inline, so exactly one statement is returned.
+func (g *MySQLGrammar) CompileCreate(bp *schema.Blueprint) ([]string, error) {
 	columns := bp.Columns()
 	if len(columns) == 0 {
-		return "", fmt.Errorf("table %q: no columns defined", bp.Table())
+		return nil, fmt.Errorf("table %q: no columns defined", bp.Table())
 	}
 
 	var parts []string
@@ -28,7 +29,7 @@ func (g *MySQLGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 	for _, col := range columns {
 		colSQL, err := g.compileColumnDef(col)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		parts = append(parts, colSQL)
 	}
@@ -66,7 +67,7 @@ func (g *MySQLGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 	}
 
 	sql := fmt.Sprintf("CREATE TABLE %s (%s)", mysqlQuote(bp.Table()), strings.Join(parts, ", "))
-	return sql, nil
+	return []string{sql}, nil
 }
 
 // CompileAlter generates ALTER TABLE statements from the given Blueprint.
@@ -146,9 +147,53 @@ func (g *MySQLGrammar) CompileHasColumn(table, column string) string {
 	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' AND column_name = '%s'", table, column)
 }
 
-// CompileDropAllTables generates a statement to disable foreign key checks and signal table drop.
-func (g *MySQLGrammar) CompileDropAllTables() string {
-	return "SET FOREIGN_KEY_CHECKS = 0"
+// CompileListTables generates a query listing all base tables in the
+// current database.
+func (g *MySQLGrammar) CompileListTables() string {
+	return "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+}
+
+// CompileDropAllTables generates statements to drop every given table with
+// foreign key checks disabled. FOREIGN_KEY_CHECKS is a session variable, so
+// the statements must run in order on the same connection.
+func (g *MySQLGrammar) CompileDropAllTables(tables []string) []string {
+	stmts := make([]string, 0, len(tables)+2)
+	stmts = append(stmts, "SET FOREIGN_KEY_CHECKS = 0")
+	for _, t := range tables {
+		stmts = append(stmts, g.CompileDropIfExists(t))
+	}
+	stmts = append(stmts, "SET FOREIGN_KEY_CHECKS = 1")
+	return stmts
+}
+
+// CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
+// the migration tracking table.
+func (g *MySQLGrammar) CompileTrackingTable(table string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		id         INT AUTO_INCREMENT PRIMARY KEY,
+		migration  VARCHAR(255) NOT NULL UNIQUE,
+		batch      INTEGER NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`, table)
+}
+
+// Placeholder returns the MySQL placeholder ("?").
+func (g *MySQLGrammar) Placeholder(index int) string {
+	return "?"
+}
+
+// CompileTryLock returns a query that tries to take a named lock without
+// waiting. GET_LOCK names are server-wide, so the key is prefixed with the
+// current database name. The result is 1 (acquired), 0 (held elsewhere) or
+// NULL (error); callers treat NULL as not acquired.
+func (g *MySQLGrammar) CompileTryLock(key string) string {
+	return "SELECT GET_LOCK(CONCAT(DATABASE(), ':', ?), 0)"
+}
+
+// CompileUnlock returns a query that releases the named lock taken by
+// CompileTryLock.
+func (g *MySQLGrammar) CompileUnlock(key string) string {
+	return "SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':', ?))"
 }
 
 // CompileColumnType returns the MySQL-specific SQL type string for a column.

@@ -19,6 +19,7 @@ func RegisterMigrateRefreshCommand(register func(name, desc string, handler func
 		},
 		func(fs *flag.FlagSet) {
 			fs.Bool("dry-run", false, "Show SQL without executing")
+			AddLockFlags(fs)
 		},
 	)
 }

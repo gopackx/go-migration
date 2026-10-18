@@ -46,8 +46,7 @@ func TestPropertyProgress_UpEventsHaveCorrectIndicesAndTotals(t *testing.T) {
 		expectGetApplied(mock, nil)
 		expectMaxBatch(mock, 0)
 		for _, name := range names {
-			expectMigrationTx(mock)
-			expectRecord(mock, name, 1)
+			expectMigrationTxRecord(mock, name, 1)
 		}
 
 		err = m.Up()
@@ -118,8 +117,7 @@ func TestPropertyProgress_ResetEventsHaveCorrectIndicesAndTotals(t *testing.T) {
 
 		// Reset reverses applied, so Down runs in reverse order.
 		for i := count - 1; i >= 0; i-- {
-			expectMigrationTx(mock)
-			expectRemove(mock, names[i])
+			expectMigrationTxRemove(mock, names[i])
 		}
 
 		err = m.Reset()

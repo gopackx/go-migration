@@ -17,8 +17,8 @@ import (
 // mockGrammar implements schema.Grammar for testing purposes.
 type mockGrammar struct{}
 
-func (g *mockGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
-	return fmt.Sprintf("CREATE TABLE %s ()", bp.Table()), nil
+func (g *mockGrammar) CompileCreate(bp *schema.Blueprint) ([]string, error) {
+	return []string{fmt.Sprintf("CREATE TABLE %s ()", bp.Table())}, nil
 }
 func (g *mockGrammar) CompileAlter(bp *schema.Blueprint) ([]string, error) {
 	return []string{fmt.Sprintf("ALTER TABLE %s", bp.Table())}, nil
@@ -32,7 +32,29 @@ func (g *mockGrammar) CompileRename(from, to string) string {
 }
 func (g *mockGrammar) CompileHasTable(table string) string       { return "SELECT 1" }
 func (g *mockGrammar) CompileHasColumn(table, col string) string { return "SELECT 1" }
-func (g *mockGrammar) CompileDropAllTables() string              { return "DROP ALL" }
+func (g *mockGrammar) CompileListTables() string                 { return "LIST TABLES" }
+
+// CompileDropAllTables returns one "DROP TABLE <name>" statement per table.
+func (g *mockGrammar) CompileDropAllTables(tables []string) []string {
+	stmts := make([]string, 0, len(tables))
+	for _, t := range tables {
+		stmts = append(stmts, "DROP TABLE "+t)
+	}
+	return stmts
+}
+
+// CompileTrackingTable and Placeholder mimic PostgreSQL so existing sqlmock
+// expectations ("CREATE TABLE IF NOT EXISTS", "$1") keep matching.
+func (g *mockGrammar) CompileTrackingTable(table string) string {
+	return "CREATE TABLE IF NOT EXISTS " + table + " (id SERIAL PRIMARY KEY, migration VARCHAR(255) NOT NULL UNIQUE, batch INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+}
+func (g *mockGrammar) Placeholder(index int) string { return fmt.Sprintf("$%d", index) }
+
+// CompileTryLock and CompileUnlock return "" (no lock, like SQLite) so that
+// the many sqlmock tests built on mockGrammar need no lock expectations. Lock
+// behaviour is tested with lockingGrammar.
+func (g *mockGrammar) CompileTryLock(key string) string { return "" }
+func (g *mockGrammar) CompileUnlock(key string) string  { return "" }
 func (g *mockGrammar) CompileColumnType(col schema.ColumnDefinition) (string, error) {
 	return "TEXT", nil
 }

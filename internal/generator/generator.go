@@ -4,10 +4,12 @@ package generator
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -23,6 +25,26 @@ type MigrationOptions struct {
 	CreateTable string
 	// AlterTable pre-populates Up() with a Schema_Builder Alter call.
 	AlterTable string
+}
+
+// descriptionPattern is the set of valid descriptions for generated files.
+// It matches the description part of migrator's migration name pattern
+// (YYYY_MM_DD_HHMMSS_RRRR_<description>), so a generated migration's init()
+// never panics in migrator.AutoRegister.
+var descriptionPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// ErrInvalidDescription is returned when a make:* description is not
+// lower snake_case.
+var ErrInvalidDescription = errors.New("invalid description")
+
+// validateDescription checks that description is lower snake_case
+// (starts with a lowercase letter; only a-z, 0-9 and underscores).
+func validateDescription(kind, description string) error {
+	if !descriptionPattern.MatchString(description) {
+		return fmt.Errorf("%w: %s name %q must be lower snake_case matching %s (e.g. \"create_users_table\")",
+			ErrInvalidDescription, kind, description, descriptionPattern.String())
+	}
+	return nil
 }
 
 // templateData holds the data passed to templates.
@@ -56,6 +78,9 @@ func NewGenerator(outputDir string) *Generator {
 // The opts parameter controls whether the template includes pre-populated
 // Schema_Builder calls for --create or --table flags.
 func (g *Generator) Migration(description string, opts MigrationOptions) (string, error) {
+	if err := validateDescription("migration", description); err != nil {
+		return "", err
+	}
 	timestamp := g.nowFunc().Format("2006_01_02_150405")
 	random := fmt.Sprintf("%04d", g.randFunc(10000))
 	filename := fmt.Sprintf("%s_%s_%s.go", timestamp, random, description)
@@ -108,6 +133,9 @@ func (g *Generator) Migration(description string, opts MigrationOptions) (string
 // Seeder generates a seeder file and returns the full filepath.
 // The filename follows the pattern description_seeder.go.
 func (g *Generator) Seeder(description string) (string, error) {
+	if err := validateDescription("seeder", description); err != nil {
+		return "", err
+	}
 	filename := fmt.Sprintf("%s_seeder.go", description)
 	structName := toStructName(description)
 
@@ -144,6 +172,9 @@ func (g *Generator) Seeder(description string) (string, error) {
 // Factory generates a factory file and returns the full filepath.
 // The filename follows the pattern description_factory.go.
 func (g *Generator) Factory(description string) (string, error) {
+	if err := validateDescription("factory", description); err != nil {
+		return "", err
+	}
 	filename := fmt.Sprintf("%s_factory.go", description)
 	structName := toStructName(description)
 

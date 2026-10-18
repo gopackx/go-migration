@@ -192,3 +192,28 @@ func TestProperty33_CreateFlagPrePopulatesSchemaCreateCall(t *testing.T) {
 		}
 	})
 }
+
+// Property: any description that is not lower snake_case is rejected by every
+// generator before anything is written to disk.
+func TestProperty_NonSnakeCaseDescriptionsRejected(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		desc := rapid.String().Draw(t, "description")
+		if descriptionPattern.MatchString(desc) {
+			t.Skip("valid description")
+		}
+		dir := filepath.Join(os.TempDir(), "gomigration-prop-invalid-desc-never-created")
+		g := NewGenerator(dir)
+		if _, err := g.Migration(desc, MigrationOptions{}); err == nil {
+			t.Fatalf("Migration(%q): expected error", desc)
+		}
+		if _, err := g.Seeder(desc); err == nil {
+			t.Fatalf("Seeder(%q): expected error", desc)
+		}
+		if _, err := g.Factory(desc); err == nil {
+			t.Fatalf("Factory(%q): expected error", desc)
+		}
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Fatalf("output dir was created for invalid description %q", desc)
+		}
+	})
+}

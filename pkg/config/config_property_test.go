@@ -11,7 +11,7 @@ import (
 
 // Valid value sets for config fields.
 var (
-	validDrivers    = []string{"postgres", "mysql", "sqlite"}
+	validDrivers    = []string{"postgres", "mysql", "sqlite", "sqlite3"}
 	validLogLevels  = []string{"debug", "info", "warn", "error"}
 	validLogOutputs = []string{"console", "file", "both"}
 )
@@ -25,7 +25,7 @@ func genValidDriver() *rapid.Generator[string] {
 func genInvalidDriver() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
 		s := rapid.StringMatching(`[a-z]{1,10}`).Draw(t, "invalidDriver")
-		for s == "postgres" || s == "mysql" || s == "sqlite" || s == "" {
+		for s == "postgres" || s == "mysql" || s == "sqlite" || s == "sqlite3" || s == "" {
 			s = rapid.StringMatching(`[a-z]{2,10}`).Draw(t, "invalidDriver")
 		}
 		return s

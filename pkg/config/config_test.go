@@ -755,7 +755,7 @@ func TestValidateValidLogOutputs(t *testing.T) {
 }
 
 func TestValidateValidDrivers(t *testing.T) {
-	for _, driver := range []string{"postgres", "mysql", "sqlite"} {
+	for _, driver := range []string{"postgres", "mysql", "sqlite", "sqlite3"} {
 		cfg := &Config{
 			Connections: map[string]ConnectionConfig{
 				"default": {
@@ -768,6 +768,38 @@ func TestValidateValidDrivers(t *testing.T) {
 		err := cfg.Validate()
 		if err != nil {
 			t.Errorf("driver %q should be valid, got error: %v", driver, err)
+		}
+	}
+}
+
+func TestValidateSQLiteSpellings(t *testing.T) {
+	for _, driver := range []string{"sqlite", "sqlite3"} {
+		t.Run(driver, func(t *testing.T) {
+			cfg := &Config{
+				Connections: map[string]ConnectionConfig{
+					"default": {
+						Driver:   driver,
+						Database: "./data.db",
+					},
+				},
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("driver %q without host should be valid, got error: %v", driver, err)
+			}
+		})
+	}
+}
+
+func TestValidateNonSQLiteStillRequiresHost(t *testing.T) {
+	for _, driver := range []string{"postgres", "mysql"} {
+		cfg := &Config{
+			Connections: map[string]ConnectionConfig{
+				"default": {Driver: driver, Database: "app"},
+			},
+		}
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "connections.default.host is required") {
+			t.Errorf("driver %q: expected host violation, got %v", driver, err)
 		}
 	}
 }

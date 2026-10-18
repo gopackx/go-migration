@@ -16,10 +16,10 @@ func NewSQLiteGrammar() *SQLiteGrammar {
 }
 
 // CompileCreate generates a CREATE TABLE statement from the given Blueprint.
-func (g *SQLiteGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
+func (g *SQLiteGrammar) CompileCreate(bp *schema.Blueprint) ([]string, error) {
 	columns := bp.Columns()
 	if len(columns) == 0 {
-		return "", fmt.Errorf("table %q: no columns defined", bp.Table())
+		return nil, fmt.Errorf("table %q: no columns defined", bp.Table())
 	}
 
 	var parts []string
@@ -28,7 +28,7 @@ func (g *SQLiteGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 	for _, col := range columns {
 		colSQL, err := g.compileColumnDef(col)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		parts = append(parts, colSQL)
 	}
@@ -49,9 +49,9 @@ func (g *SQLiteGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 	for _, idx := range bp.Indexes() {
 		switch idx.Type {
 		case schema.IndexFulltext:
-			return "", fmt.Errorf("fulltext indexes are not supported by SQLite")
+			return nil, fmt.Errorf("fulltext indexes are not supported by SQLite")
 		case schema.IndexSpatial:
-			return "", fmt.Errorf("spatial indexes are not supported by SQLite")
+			return nil, fmt.Errorf("spatial indexes are not supported by SQLite")
 		case schema.IndexUnique:
 			quotedCols := quoteSlice(idx.Columns)
 			parts = append(parts, fmt.Sprintf("CONSTRAINT %s UNIQUE (%s)", quote(idx.Name), strings.Join(quotedCols, ", ")))
@@ -64,22 +64,23 @@ func (g *SQLiteGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 		parts = append(parts, fkSQL)
 	}
 
-	sql := fmt.Sprintf("CREATE TABLE %s (%s)", quote(bp.Table()), strings.Join(parts, ", "))
+	stmts := []string{fmt.Sprintf("CREATE TABLE %s (%s)", quote(bp.Table()), strings.Join(parts, ", "))}
 
-	// Append non-unique index CREATE INDEX statements separated by semicolons
+	// Non-unique indexes cannot be declared inline in SQLite; emit one
+	// CREATE INDEX statement each, to be executed separately.
 	for _, idx := range bp.Indexes() {
 		switch idx.Type {
 		case schema.IndexFulltext:
-			return "", fmt.Errorf("fulltext indexes are not supported by SQLite")
+			return nil, fmt.Errorf("fulltext indexes are not supported by SQLite")
 		case schema.IndexSpatial:
-			return "", fmt.Errorf("spatial indexes are not supported by SQLite")
+			return nil, fmt.Errorf("spatial indexes are not supported by SQLite")
 		case schema.IndexRegular:
 			quotedCols := quoteSlice(idx.Columns)
-			sql += fmt.Sprintf("; CREATE INDEX %s ON %s (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", "))
+			stmts = append(stmts, fmt.Sprintf("CREATE INDEX %s ON %s (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", ")))
 		}
 	}
 
-	return sql, nil
+	return stmts, nil
 }
 
 // CompileAlter generates ALTER TABLE statements from the given Blueprint.
@@ -163,11 +164,49 @@ func (g *SQLiteGrammar) CompileHasColumn(table, column string) string {
 	return fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, column)
 }
 
-// CompileDropAllTables generates a query to retrieve all table names for dropping.
-// SQLite doesn't support dropping all tables in a single statement, so this returns
-// a query to select all table names from sqlite_master.
-func (g *SQLiteGrammar) CompileDropAllTables() string {
+// CompileListTables generates a query listing all user tables (excluding
+// SQLite's internal sqlite_* tables).
+func (g *SQLiteGrammar) CompileListTables() string {
 	return "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+}
+
+// CompileDropAllTables generates statements to drop every given table.
+// SQLite cannot drop all tables in a single statement, so foreign key
+// enforcement is switched off and each table is dropped individually.
+func (g *SQLiteGrammar) CompileDropAllTables(tables []string) []string {
+	stmts := make([]string, 0, len(tables)+1)
+	stmts = append(stmts, "PRAGMA foreign_keys = OFF")
+	for _, t := range tables {
+		stmts = append(stmts, g.CompileDropIfExists(t))
+	}
+	return stmts
+}
+
+// CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
+// the migration tracking table.
+func (g *SQLiteGrammar) CompileTrackingTable(table string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		migration  VARCHAR(255) NOT NULL UNIQUE,
+		batch      INTEGER NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`, table)
+}
+
+// Placeholder returns the SQLite placeholder ("?").
+func (g *SQLiteGrammar) Placeholder(index int) string {
+	return "?"
+}
+
+// CompileTryLock returns "": SQLite needs no explicit migration lock, since
+// its database file lock already serialises writers.
+func (g *SQLiteGrammar) CompileTryLock(key string) string {
+	return ""
+}
+
+// CompileUnlock returns "" (see CompileTryLock).
+func (g *SQLiteGrammar) CompileUnlock(key string) string {
+	return ""
 }
 
 // CompileColumnType returns the SQLite-specific SQL type string for a column.

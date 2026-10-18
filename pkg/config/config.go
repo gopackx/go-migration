@@ -69,6 +69,11 @@ func (c *Config) ApplyDefaults() {
 	}
 }
 
+// isSQLiteDriver reports whether driver names the SQLite driver.
+func isSQLiteDriver(driver string) bool {
+	return driver == "sqlite" || driver == "sqlite3"
+}
+
 // Validate checks that the configuration has all required fields and valid values.
 // Returns an error wrapping ErrConfigValidation listing all violations.
 func (c *Config) Validate() error {
@@ -78,7 +83,10 @@ func (c *Config) Validate() error {
 		violations = append(violations, "at least one connection must be defined")
 	}
 
-	validDrivers := map[string]bool{"postgres": true, "mysql": true, "sqlite": true}
+	// The SQLite driver (modernc.org/sqlite) registers itself with
+	// database/sql as "sqlite"; "sqlite3" is accepted as an alias for
+	// configurations written for other SQLite drivers.
+	validDrivers := map[string]bool{"postgres": true, "mysql": true, "sqlite": true, "sqlite3": true}
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	validLogOutputs := map[string]bool{"console": true, "file": true, "both": true}
 
@@ -86,9 +94,10 @@ func (c *Config) Validate() error {
 		if conn.Driver == "" {
 			violations = append(violations, fmt.Sprintf("connections.%s.driver is required", name))
 		} else if !validDrivers[conn.Driver] {
-			violations = append(violations, fmt.Sprintf("connections.%s.driver must be one of: postgres, mysql, sqlite", name))
+			violations = append(violations, fmt.Sprintf("connections.%s.driver must be one of: postgres, mysql, sqlite, sqlite3", name))
 		}
-		if conn.Host == "" {
+		// SQLite is file based: the database path is all it needs.
+		if conn.Host == "" && !isSQLiteDriver(conn.Driver) {
 			violations = append(violations, fmt.Sprintf("connections.%s.host is required", name))
 		}
 		if conn.Database == "" {

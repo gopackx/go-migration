@@ -5,6 +5,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gopackx/go-migration/pkg/config"
+	"github.com/gopackx/go-migration/pkg/database"
+	"github.com/gopackx/go-migration/pkg/schema/grammars"
+	"github.com/gopackx/go-migration/pkg/seeder"
 )
 
 func TestSentinelErrors_ImplementErrorInterface(t *testing.T) {
@@ -108,5 +113,44 @@ func TestSentinelErrors_WrappedPreservesContext(t *testing.T) {
 	}
 	if !strings.Contains(wrapped.Error(), "transaction failed") {
 		t.Errorf("%q not in %q", "transaction failed", wrapped.Error())
+	}
+}
+
+// The migrator re-exports sentinels owned by other packages; they must be the
+// very same values so errors.Is works across package boundaries.
+func TestSentinelErrors_AliasCanonicalValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		alias     error
+		canonical error
+	}{
+		{"ErrConnectionFailed", ErrConnectionFailed, database.ErrConnectionFailed},
+		{"ErrConnectionNotFound", ErrConnectionNotFound, database.ErrConnectionNotFound},
+		{"ErrTransactionFailed", ErrTransactionFailed, database.ErrTransactionFailed},
+		{"ErrDuplicateSeeder", ErrDuplicateSeeder, seeder.ErrDuplicateSeeder},
+		{"ErrInvalidSeederName", ErrInvalidSeederName, seeder.ErrInvalidSeederName},
+		{"ErrCircularDependency", ErrCircularDependency, seeder.ErrCircularDependency},
+		{"ErrSeederNotFound", ErrSeederNotFound, seeder.ErrSeederNotFound},
+		{"ErrConfigValidation", ErrConfigValidation, config.ErrConfigValidation},
+		{"ErrUnsupportedType", ErrUnsupportedType, grammars.ErrUnsupportedType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapped := fmt.Errorf("ctx: %w", tt.canonical)
+			if !errors.Is(wrapped, tt.alias) {
+				t.Errorf("errors.Is(wrapped canonical, migrator alias) = false")
+			}
+		})
+	}
+}
+
+func TestSeederNotFound_MatchesMigratorAlias(t *testing.T) {
+	r := seeder.NewRegistry()
+	_, err := r.Get("missing")
+	if err == nil {
+		t.Skip("seeder registry returned no error for a missing seeder")
+	}
+	if !errors.Is(err, ErrSeederNotFound) {
+		t.Errorf("errors.Is(seeder registry error, migrator.ErrSeederNotFound) = false: %v", err)
 	}
 }

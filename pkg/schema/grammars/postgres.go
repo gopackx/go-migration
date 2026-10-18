@@ -18,11 +18,12 @@ func NewPostgresGrammar() *PostgresGrammar {
 	return &PostgresGrammar{}
 }
 
-// CompileCreate generates a CREATE TABLE statement from the given Blueprint.
-func (g *PostgresGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
+// CompileCreate generates a CREATE TABLE statement from the given Blueprint,
+// followed by one CREATE INDEX statement per non-unique index.
+func (g *PostgresGrammar) CompileCreate(bp *schema.Blueprint) ([]string, error) {
 	columns := bp.Columns()
 	if len(columns) == 0 {
-		return "", fmt.Errorf("table %q: no columns defined", bp.Table())
+		return nil, fmt.Errorf("table %q: no columns defined", bp.Table())
 	}
 
 	var parts []string
@@ -31,7 +32,7 @@ func (g *PostgresGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 	for _, col := range columns {
 		colSQL, err := g.compileColumnDef(col)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		parts = append(parts, colSQL)
 	}
@@ -61,25 +62,26 @@ func (g *PostgresGrammar) CompileCreate(bp *schema.Blueprint) (string, error) {
 		parts = append(parts, fkSQL)
 	}
 
-	sql := fmt.Sprintf("CREATE TABLE %s (%s)", quote(bp.Table()), strings.Join(parts, ", "))
+	stmts := []string{fmt.Sprintf("CREATE TABLE %s (%s)", quote(bp.Table()), strings.Join(parts, ", "))}
 
-	// Append non-unique index CREATE INDEX statements separated by semicolons
+	// Non-unique indexes cannot be declared inline in PostgreSQL; emit one
+	// CREATE INDEX statement each, to be executed separately.
 	for _, idx := range bp.Indexes() {
 		switch idx.Type {
 		case schema.IndexRegular:
 			quotedCols := quoteSlice(idx.Columns)
-			sql += fmt.Sprintf("; CREATE INDEX %s ON %s (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", "))
+			stmts = append(stmts, fmt.Sprintf("CREATE INDEX %s ON %s (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", ")))
 		case schema.IndexFulltext:
 			for _, col := range idx.Columns {
-				sql += fmt.Sprintf("; CREATE INDEX %s ON %s USING GIN (to_tsvector('english', %s))", quote(idx.Name), quote(bp.Table()), quote(col))
+				stmts = append(stmts, fmt.Sprintf("CREATE INDEX %s ON %s USING GIN (to_tsvector('english', %s))", quote(idx.Name), quote(bp.Table()), quote(col)))
 			}
 		case schema.IndexSpatial:
 			quotedCols := quoteSlice(idx.Columns)
-			sql += fmt.Sprintf("; CREATE INDEX %s ON %s USING GIST (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", "))
+			stmts = append(stmts, fmt.Sprintf("CREATE INDEX %s ON %s USING GIST (%s)", quote(idx.Name), quote(bp.Table()), strings.Join(quotedCols, ", ")))
 		}
 	}
 
-	return sql, nil
+	return stmts, nil
 }
 
 // CompileAlter generates ALTER TABLE statements from the given Blueprint.
@@ -161,9 +163,46 @@ func (g *PostgresGrammar) CompileHasColumn(table, column string) string {
 	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '%s' AND column_name = '%s'", table, column)
 }
 
-// CompileDropAllTables generates statements to drop all tables by dropping and recreating the public schema.
-func (g *PostgresGrammar) CompileDropAllTables() string {
-	return "DROP SCHEMA public CASCADE; CREATE SCHEMA public"
+// CompileListTables generates a query listing all tables in the public schema.
+func (g *PostgresGrammar) CompileListTables() string {
+	return "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+}
+
+// CompileDropAllTables generates statements to drop all tables by dropping and
+// recreating the public schema. The table list is not needed and is ignored.
+func (g *PostgresGrammar) CompileDropAllTables(tables []string) []string {
+	return []string{
+		"DROP SCHEMA public CASCADE",
+		"CREATE SCHEMA public",
+	}
+}
+
+// CompileTrackingTable generates the CREATE TABLE IF NOT EXISTS statement for
+// the migration tracking table.
+func (g *PostgresGrammar) CompileTrackingTable(table string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		id         SERIAL PRIMARY KEY,
+		migration  VARCHAR(255) NOT NULL UNIQUE,
+		batch      INTEGER NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`, table)
+}
+
+// Placeholder returns the PostgreSQL positional placeholder ($1, $2, ...).
+func (g *PostgresGrammar) Placeholder(index int) string {
+	return fmt.Sprintf("$%d", index)
+}
+
+// CompileTryLock returns a query that tries to take a session-level advisory
+// lock on hashtext(key). Advisory locks are scoped to the current database.
+func (g *PostgresGrammar) CompileTryLock(key string) string {
+	return "SELECT pg_try_advisory_lock(hashtext($1))"
+}
+
+// CompileUnlock returns a query that releases the advisory lock taken by
+// CompileTryLock.
+func (g *PostgresGrammar) CompileUnlock(key string) string {
+	return "SELECT pg_advisory_unlock(hashtext($1))"
 }
 
 // CompileColumnType returns the PostgreSQL-specific SQL type string for a column.

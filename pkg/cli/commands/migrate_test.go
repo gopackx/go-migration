@@ -240,6 +240,7 @@ func TestAllMigrateCommands_HaveHelpText(t *testing.T) {
 // stubMigratorFn with configurable callbacks for testing
 type stubMigratorFn struct {
 	rollbackFn func(int) error
+	statusFn   func() ([]MigrationStatusInfo, error)
 }
 
 func (s stubMigratorFn) Up() error { return nil }
@@ -249,7 +250,12 @@ func (s stubMigratorFn) Rollback(steps int) error {
 	}
 	return nil
 }
-func (s stubMigratorFn) Reset() error                           { return nil }
-func (s stubMigratorFn) Refresh() error                         { return nil }
-func (s stubMigratorFn) Fresh() error                           { return nil }
-func (s stubMigratorFn) Status() ([]MigrationStatusInfo, error) { return nil, nil }
+func (s stubMigratorFn) Reset() error   { return nil }
+func (s stubMigratorFn) Refresh() error { return nil }
+func (s stubMigratorFn) Fresh() error   { return nil }
+func (s stubMigratorFn) Status() ([]MigrationStatusInfo, error) {
+	if s.statusFn != nil {
+		return s.statusFn()
+	}
+	return nil, nil
+}

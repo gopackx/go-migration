@@ -132,8 +132,7 @@ func TestProperty5_UpExecutesOnlyPendingInOrder(t *testing.T) {
 		if len(expectedPending) > 0 {
 			expectMaxBatch(mock, maxBatch)
 			for _, name := range expectedPending {
-				expectMigrationTx(mock)
-				expectRecord(mock, name, maxBatch+1)
+				expectMigrationTxRecord(mock, name, maxBatch+1)
 			}
 		}
 
@@ -197,9 +196,8 @@ func TestProperty6_BatchNumberConsistency(t *testing.T) {
 		if len(pendingNames) > 0 {
 			expectMaxBatch(mock, maxBatch)
 			for _, name := range pendingNames {
-				expectMigrationTx(mock)
 				// Each pending migration must be recorded with exactly expectedBatch
-				expectRecord(mock, name, expectedBatch)
+				expectMigrationTxRecord(mock, name, expectedBatch)
 			}
 		}
 
@@ -291,8 +289,7 @@ func TestProperty7_RollbackByBatchReversesLastBatch(t *testing.T) {
 		}
 
 		for _, r := range reversed {
-			expectMigrationTx(mock)
-			expectRemove(mock, r.Name)
+			expectMigrationTxRemove(mock, r.Name)
 		}
 
 		err = m.Rollback(0)
@@ -367,8 +364,7 @@ func TestProperty8_RollbackByStepCount(t *testing.T) {
 		}
 
 		for _, name := range expectedRolledBack {
-			expectMigrationTx(mock)
-			expectRemove(mock, name)
+			expectMigrationTxRemove(mock, name)
 		}
 
 		err = m.Rollback(steps)
@@ -433,10 +429,9 @@ func TestProperty9_RollbackRemovesTrackerRecords(t *testing.T) {
 		expectGetApplied(mock, records)
 
 		for i := len(names) - 1; i >= len(names)-expectedCount; i-- {
-			expectMigrationTx(mock)
 			// Track the expected removes
 			removedNames = append(removedNames, names[i])
-			expectRemove(mock, names[i])
+			expectMigrationTxRemove(mock, names[i])
 		}
 
 		err = m.Rollback(steps)
@@ -490,8 +485,7 @@ func TestProperty10_ResetClearsAllApplied(t *testing.T) {
 		}
 
 		for _, r := range reversed {
-			expectMigrationTx(mock)
-			expectRemove(mock, r.Name)
+			expectMigrationTxRemove(mock, r.Name)
 		}
 
 		err = m.Reset()
@@ -556,8 +550,7 @@ func TestProperty11_RefreshEqualsResetThenUp(t *testing.T) {
 		}
 
 		for _, r := range reversed {
-			expectMigrationTx(mock)
-			expectRemove(mock, r.Name)
+			expectMigrationTxRemove(mock, r.Name)
 		}
 
 		// --- Up phase expectations ---
@@ -567,8 +560,7 @@ func TestProperty11_RefreshEqualsResetThenUp(t *testing.T) {
 		expectMaxBatch(mock, 0)     // fresh start
 
 		for _, name := range names {
-			expectMigrationTx(mock)
-			expectRecord(mock, name, 1)
+			expectMigrationTxRecord(mock, name, 1)
 		}
 
 		err = m.Refresh()
@@ -629,7 +621,7 @@ func TestProperty13_StatusReflectsState(t *testing.T) {
 			appliedMap[r.Name] = r
 		}
 
-		expectEnsureTable(mock)
+		expectMockHasTable(mock, true)
 		expectGetApplied(mock, appliedRecords)
 
 		statuses, err := m.Status()

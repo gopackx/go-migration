@@ -20,10 +20,11 @@ func RegisterSeedTruncateCommand(register func(name, desc string, handler func(a
 			if *table == "" {
 				return fmt.Errorf("--table flag is required")
 			}
-			return ctx.Seeder.Truncate(*table)
+			return withLock(ctx, func() error { return ctx.Seeder.Truncate(*table) })
 		},
 		func(fs *flag.FlagSet) {
 			table = fs.String("table", "", "table to truncate (required)")
+			AddLockFlags(fs)
 		},
 	)
 }

@@ -27,3 +27,6 @@ func (r *RecordingExecutor) QueryRow(query string, args ...any) *sql.Row {
 	r.LastSQL = query
 	return r.inner.QueryRow(query, args...)
 }
+
+// IsDryRun reports whether the wrapped executor is a dry-run executor.
+func (r *RecordingExecutor) IsDryRun() bool { return isDryRun(r.inner) }

@@ -67,13 +67,33 @@ func (r *Runner) Execute(m Migration, direction string, migrationName ...string)
 	if len(migrationName) > 0 {
 		name = migrationName[0]
 	}
+	return r.ExecuteWithHook(m, direction, name, nil)
+}
+
+// AfterMigrateFunc runs after a migration's Up/Down succeeded. For
+// transactional migrations ex is the migration's *sql.Tx and the callback runs
+// before commit, so its writes commit or roll back together with the
+// migration. For migrations that disable transactions ex is the *sql.DB.
+type AfterMigrateFunc func(ex schema.Executor) error
+
+// ExecuteWithHook behaves like Execute, and additionally calls after (when
+// non-nil) once the migration has succeeded, using the same executor the
+// migration ran on. If after returns an error, a transactional migration is
+// rolled back and the error is returned. In dry-run mode after is not called.
+func (r *Runner) ExecuteWithHook(m Migration, direction string, migrationName string, after AfterMigrateFunc) error {
 	if r.dryRun {
 		return r.executeDryRun(m, direction)
 	}
 	if opt, ok := m.(TransactionOption); ok && opt.DisableTransaction() {
-		return r.executeWithoutTransaction(m, direction, name)
+		if err := r.executeWithoutTransaction(m, direction, migrationName); err != nil {
+			return err
+		}
+		if after != nil {
+			return after(r.db)
+		}
+		return nil
 	}
-	return r.ExecuteInTransaction(m, direction, name)
+	return r.executeInTransaction(m, direction, migrationName, after)
 }
 
 // ExecuteDryRun runs a migration in the given direction ("up" or "down")
@@ -93,14 +113,19 @@ func (r *Runner) executeDryRun(m Migration, direction string) error {
 
 // ExecuteInTransaction runs a migration within a database transaction.
 // On success the transaction is committed. On migration error the transaction
-// is rolled back. If commit fails, a rollback is attempted and ErrTransactionFailed
+// is rolled back. If commit fails, ErrTransactionFailed (wrapping the commit error)
 // is returned. SQL errors are wrapped in MigrationError when migrationName is provided.
 func (r *Runner) ExecuteInTransaction(m Migration, direction string, migrationName ...string) error {
 	name := ""
 	if len(migrationName) > 0 {
 		name = migrationName[0]
 	}
+	return r.executeInTransaction(m, direction, name, nil)
+}
 
+// executeInTransaction runs the migration in a transaction and, on success,
+// calls after (if non-nil) with the transaction before committing.
+func (r *Runner) executeInTransaction(m Migration, direction string, name string, after AfterMigrateFunc) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -121,11 +146,19 @@ func (r *Runner) ExecuteInTransaction(m Migration, direction string, migrationNa
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("rollback after commit failure: %v: %w", rbErr, ErrTransactionFailed)
+	if after != nil {
+		if err := after(tx); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return fmt.Errorf("rollback after post-migration error: %v, original: %w", rbErr, err)
+			}
+			return err
 		}
-		return fmt.Errorf("commit: %w", ErrTransactionFailed)
+	}
+
+	if err := tx.Commit(); err != nil {
+		// A failed Commit already ends the transaction (a further Rollback
+		// would only return sql.ErrTxDone), so report the commit error itself.
+		return fmt.Errorf("commit: %w: %w", ErrTransactionFailed, err)
 	}
 
 	return nil

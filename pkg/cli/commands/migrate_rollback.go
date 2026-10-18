@@ -23,6 +23,7 @@ func RegisterMigrateRollbackCommand(register func(name, desc string, handler fun
 		func(fs *flag.FlagSet) {
 			step = fs.Int("step", 0, "number of migrations to roll back (0 = last batch)")
 			fs.Bool("dry-run", false, "Show SQL without executing")
+			AddLockFlags(fs)
 		},
 	)
 }

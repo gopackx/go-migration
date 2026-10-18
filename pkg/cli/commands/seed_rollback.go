@@ -20,10 +20,11 @@ func RegisterSeedRollbackCommand(register func(name, desc string, handler func(a
 			if *class == "" {
 				return fmt.Errorf("--class flag is required")
 			}
-			return ctx.Seeder.Rollback(*class)
+			return withLock(ctx, func() error { return ctx.Seeder.Rollback(*class) })
 		},
 		func(fs *flag.FlagSet) {
 			class = fs.String("class", "", "seeder class to rollback (required)")
+			AddLockFlags(fs)
 		},
 	)
 }

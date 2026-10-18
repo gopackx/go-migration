@@ -229,7 +229,7 @@ func TestCompileCreate_SimpleTable(t *testing.T) {
 	bp.ID()
 	bp.String("name", 255)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestCompileCreate_NoColumns(t *testing.T) {
 	g := newGrammar()
 	bp := schema.NewBlueprint("empty")
 
-	_, err := g.CompileCreate(bp)
+	_, err := joinCreate(g.CompileCreate(bp))
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -277,7 +277,7 @@ func TestCompileCreate_AllColumnTypes(t *testing.T) {
 	bp.JSON("col_json")
 	bp.Binary("col_bin")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestCompileCreate_NullableColumn(t *testing.T) {
 	bp := schema.NewBlueprint("posts")
 	bp.Text("body").Nullable()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestCompileCreate_DefaultValue(t *testing.T) {
 	bp.String("status", 50).Default("pending")
 	bp.Integer("count").Default(0)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestCompileCreate_UniqueColumn(t *testing.T) {
 	bp := schema.NewBlueprint("users")
 	bp.String("email", 255).Unique()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestCompileCreate_WithIndexes(t *testing.T) {
 	bp.Index("name")
 	bp.UniqueIndex("email")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestCompileCreate_WithForeignKey(t *testing.T) {
 	bp.BigInteger("user_id")
 	bp.Foreign("user_id").References("id").On("users").OnDeleteAction("CASCADE").OnUpdateAction("SET NULL")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestCompileCreate_FullTable(t *testing.T) {
 	bp.Timestamps()
 	bp.Index("name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -686,19 +686,6 @@ func TestCompileHasColumn(t *testing.T) {
 	}
 }
 
-// --- CompileDropAllTables test ---
-
-func TestCompileDropAllTables(t *testing.T) {
-	g := newGrammar()
-	sql := g.CompileDropAllTables()
-	if !strings.Contains(sql, "DROP SCHEMA public CASCADE") {
-		t.Errorf("%q not in %q", "DROP SCHEMA public CASCADE", sql)
-	}
-	if !strings.Contains(sql, "CREATE SCHEMA public") {
-		t.Errorf("%q not in %q", "CREATE SCHEMA public", sql)
-	}
-}
-
 // --- Grammar interface compliance ---
 
 func TestPostgresGrammar_ImplementsGrammar(t *testing.T) {
@@ -714,7 +701,7 @@ func TestCompileCreate_CompositeIndex(t *testing.T) {
 	bp.String("last_name", 100)
 	bp.Index("first_name", "last_name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -728,7 +715,7 @@ func TestCompileCreate_DefaultStringEscapesSingleQuotes(t *testing.T) {
 	bp := schema.NewBlueprint("test")
 	bp.String("val", 100).Default("it's")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -743,7 +730,7 @@ func TestCompileCreate_Timestamps(t *testing.T) {
 	bp.String("title", 255)
 	bp.Timestamps()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -921,7 +908,7 @@ func TestCompileCreate_WithEnumColumn(t *testing.T) {
 	bp.String("name", 255)
 	bp.Enum("status", []string{"active", "inactive"})
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -935,7 +922,7 @@ func TestCompileCreate_WithCharColumn(t *testing.T) {
 	bp := schema.NewBlueprint("countries")
 	bp.Char("code", 2)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -950,7 +937,7 @@ func TestCompileCreate_WithNewTextTypes(t *testing.T) {
 	bp.LongText("body")
 	bp.MediumText("summary")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -968,7 +955,7 @@ func TestCompileCreate_WithNewIntTypes(t *testing.T) {
 	bp.TinyInt("priority")
 	bp.SmallInt("score")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -989,7 +976,7 @@ func TestCompileCreate_WithFulltextIndex(t *testing.T) {
 	bp.Text("body")
 	bp.FulltextIndex("title")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1004,7 +991,7 @@ func TestCompileCreate_WithSpatialIndex(t *testing.T) {
 	bp.String("geom", 255)
 	bp.SpatialIndex("geom")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1055,7 +1042,7 @@ func TestCompileCreate_WithFulltextAndRegularIndexes(t *testing.T) {
 	bp.Index("slug")
 	bp.FulltextIndex("title")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

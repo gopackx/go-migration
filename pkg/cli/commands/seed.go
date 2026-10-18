@@ -17,17 +17,20 @@ func RegisterSeedCommand(register func(name, desc string, handler func(args []st
 			if ctx == nil || ctx.Seeder == nil {
 				return fmt.Errorf("seeder runner not initialized")
 			}
-			if *class != "" {
-				return ctx.Seeder.Run(*class)
-			}
-			if *tag != "" {
-				return ctx.Seeder.RunByTag(*tag)
-			}
-			return ctx.Seeder.RunAll()
+			return withLock(ctx, func() error {
+				if *class != "" {
+					return ctx.Seeder.Run(*class)
+				}
+				if *tag != "" {
+					return ctx.Seeder.RunByTag(*tag)
+				}
+				return ctx.Seeder.RunAll()
+			})
 		},
 		func(fs *flag.FlagSet) {
 			class = fs.String("class", "", "specific seeder class to run")
 			tag = fs.String("tag", "", "run only seeders with the specified tag")
+			AddLockFlags(fs)
 		},
 	)
 }

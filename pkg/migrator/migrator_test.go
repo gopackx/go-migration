@@ -1,8 +1,11 @@
 package migrator
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -26,6 +29,16 @@ func newTestMigrator(t *testing.T) (*Migrator, *sql.DB, sqlmock.Sqlmock) {
 // expectEnsureTable sets up the sqlmock expectation for CREATE TABLE IF NOT EXISTS.
 func expectEnsureTable(mock sqlmock.Sqlmock) {
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS").WillReturnResult(sqlmock.NewResult(0, 0))
+}
+
+// expectMockHasTable expects mockGrammar's HasTable query ("SELECT 1") used
+// by Tracker.TableExists, returning a count of 1 (exists) or 0.
+func expectMockHasTable(mock sqlmock.Sqlmock, exists bool) {
+	count := 0
+	if exists {
+		count = 1
+	}
+	mock.ExpectQuery("^SELECT 1$").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(count))
 }
 
 // expectGetApplied sets up a query expectation returning the given migration names/batches.
@@ -56,9 +69,36 @@ func expectRemove(mock sqlmock.Sqlmock, name string) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
-// expectMigrationTx sets up Begin + Commit expectations for a single migration.
-func expectMigrationTx(mock sqlmock.Sqlmock) {
+// keepMockDriverConn pins one extra pooled connection for the duration of a
+// test. Fresh discards the connection it dropped tables on (driver.ErrBadConn),
+// which makes database/sql Close it; sqlmock unregisters its DSN once every
+// connection is closed, after which no new connection can be opened. Holding
+// a spare connection keeps the DSN registered. Call the returned func (defer)
+// to release it.
+func keepMockDriverConn(t *testing.T, db *sql.DB) func() {
+	t.Helper()
+	spare, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("pin spare connection: %v", err)
+	}
+	return func() { _ = spare.Close() }
+}
+
+// expectMigrationTxRecord sets up the expectations for one successful
+// transactional "up" migration: the tracking INSERT runs inside the
+// migration's transaction, before commit.
+func expectMigrationTxRecord(mock sqlmock.Sqlmock, name string, batch int) {
 	mock.ExpectBegin()
+	expectRecord(mock, name, batch)
+	mock.ExpectCommit()
+}
+
+// expectMigrationTxRemove sets up the expectations for one successful
+// transactional "down" migration: the tracking DELETE runs inside the
+// migration's transaction, before commit.
+func expectMigrationTxRemove(mock sqlmock.Sqlmock, name string) {
+	mock.ExpectBegin()
+	expectRemove(mock, name)
 	mock.ExpectCommit()
 }
 
@@ -80,12 +120,10 @@ func TestUp_PendingMigrations(t *testing.T) {
 	expectMaxBatch(mock, 0)     // first batch
 
 	// Migration 1
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_create_users", 1)
+	expectMigrationTxRecord(mock, "20240101000000_create_users", 1)
 
 	// Migration 2
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240102000000_create_posts", 1)
+	expectMigrationTxRecord(mock, "20240102000000_create_posts", 1)
 
 	err := m.Up()
 	if err != nil {
@@ -136,8 +174,7 @@ func TestUp_PartiallyApplied(t *testing.T) {
 	expectMaxBatch(mock, 1) // next batch = 2
 
 	// Only migration 2 should run
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240102000000_create_posts", 2)
+	expectMigrationTxRecord(mock, "20240102000000_create_posts", 2)
 
 	err := m.Up()
 	if err != nil {
@@ -172,11 +209,9 @@ func TestRollback_ByBatch(t *testing.T) {
 		WithArgs(1).WillReturnRows(rows)
 
 	// Rollback in reverse order: posts first, then users
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240102000000_create_posts")
+	expectMigrationTxRemove(mock, "20240102000000_create_posts")
 
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240101000000_create_users")
+	expectMigrationTxRemove(mock, "20240101000000_create_users")
 
 	err := m.Rollback(0)
 	if err != nil {
@@ -211,11 +246,9 @@ func TestRollback_BySteps(t *testing.T) {
 	})
 
 	// Rollback: tags first, then posts (reverse order)
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240103000000_create_tags")
+	expectMigrationTxRemove(mock, "20240103000000_create_tags")
 
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240102000000_create_posts")
+	expectMigrationTxRemove(mock, "20240102000000_create_posts")
 
 	err := m.Rollback(2)
 	if err != nil {
@@ -246,11 +279,9 @@ func TestReset(t *testing.T) {
 	})
 
 	// Reverse order: posts first, then users
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240102000000_create_posts")
+	expectMigrationTxRemove(mock, "20240102000000_create_posts")
 
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240101000000_create_users")
+	expectMigrationTxRemove(mock, "20240101000000_create_users")
 
 	err := m.Reset()
 	if err != nil {
@@ -275,7 +306,7 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("unexpected error: %v", m.Register("20240102000000_create_posts", &noopMigration{}))
 	}
 
-	expectEnsureTable(mock)
+	expectMockHasTable(mock, true)
 	expectGetApplied(mock, []MigrationRecord{
 		{Name: "20240101000000_create_users", Batch: 1, CreatedAt: now},
 	})
@@ -324,20 +355,24 @@ func TestStatus(t *testing.T) {
 func TestFresh(t *testing.T) {
 	m, db, mock := newTestMigrator(t)
 	defer db.Close()
+	defer keepMockDriverConn(t, db)()
 
 	if m.Register("20240101000000_create_users", &noopMigration{}) != nil {
 		t.Fatalf("unexpected error: %v", m.Register("20240101000000_create_users", &noopMigration{}))
 	}
 
-	// Drop all tables
-	mock.ExpectExec("DROP ALL").WillReturnResult(sqlmock.NewResult(0, 0))
+	// List tables, then drop each one with a separate statement
+	mock.ExpectQuery("LIST TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"name"}).AddRow("users").AddRow("migrations"),
+	)
+	mock.ExpectExec("^DROP TABLE users$").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("^DROP TABLE migrations$").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	// Then Up()
 	expectEnsureTable(mock)
 	expectGetApplied(mock, nil)
 	expectMaxBatch(mock, 0)
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_create_users", 1)
+	expectMigrationTxRecord(mock, "20240101000000_create_users", 1)
 
 	err := m.Fresh()
 	if err != nil {
@@ -351,18 +386,130 @@ func TestFresh(t *testing.T) {
 func TestFresh_DropFails(t *testing.T) {
 	m, db, mock := newTestMigrator(t)
 	defer db.Close()
+	defer keepMockDriverConn(t, db)()
 
-	mock.ExpectExec("DROP ALL").WillReturnError(errors.New("permission denied"))
+	mock.ExpectQuery("LIST TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"name"}).AddRow("users").AddRow("posts"),
+	)
+	mock.ExpectExec("DROP TABLE users").WillReturnError(errors.New("permission denied"))
 
 	err := m.Fresh()
 	if err == nil {
-		t.Errorf("expected error, got nil")
+		t.Fatalf("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "drop all tables") {
 		t.Errorf("%q not in %q", "drop all tables", err.Error())
 	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("%q not in %q", "permission denied", err.Error())
+	}
+	// "DROP TABLE posts" must not run after the first failure, and Up()
+	// must not run either.
 	if mock.ExpectationsWereMet() != nil {
 		t.Errorf("unexpected error: %v", mock.ExpectationsWereMet())
+	}
+}
+
+func TestFresh_ListTablesFails(t *testing.T) {
+	m, db, mock := newTestMigrator(t)
+	defer db.Close()
+
+	mock.ExpectQuery("LIST TABLES").WillReturnError(errors.New("no access"))
+
+	err := m.Fresh()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "list tables") || !strings.Contains(err.Error(), "no access") {
+		t.Errorf("unexpected error text: %q", err.Error())
+	}
+	if mock.ExpectationsWereMet() != nil {
+		t.Errorf("unexpected error: %v", mock.ExpectationsWereMet())
+	}
+}
+
+func TestFresh_DryRun_PrintsDropStatements(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer db.Close()
+
+	var buf bytes.Buffer
+	m := New(db, WithGrammar(&mockGrammar{}), WithDryRun(&buf))
+	if err := m.Register("20240101000000_create_users", &noopMigration{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the read-only list query runs. Nothing is dropped, and since the
+	// tables would be gone after a real Fresh, the tracking table is not
+	// consulted: every migration is shown as pending. No DDL/DML executes.
+	mock.ExpectQuery("LIST TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"name"}).AddRow("users").AddRow("posts"),
+	)
+
+	if err := m.Fresh(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"-- Fresh: drop all tables", "DROP TABLE users;", "DROP TABLE posts;", "-- Migration: 20240101000000_create_users"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q not in dry-run output %q", want, out)
+		}
+	}
+	if mock.ExpectationsWereMet() != nil {
+		t.Errorf("unexpected error: %v", mock.ExpectationsWereMet())
+	}
+}
+
+// Fresh must work with a real dialect: MySQL lists base tables and drops each
+// one between FOREIGN_KEY_CHECKS toggles, all as separate statements.
+func TestFresh_MySQLGrammar(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer db.Close()
+
+	g, err := ResolveGrammar("mysql")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer keepMockDriverConn(t, db)()
+	m := New(db, WithGrammar(g))
+	if err := m.Register("20240101000000_create_users", &noopMigration{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT GET_LOCK(CONCAT(DATABASE(), ':', ?), 0)")).
+		WithArgs("go-migration:migrations").
+		WillReturnRows(sqlmock.NewRows([]string{"lock"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'")).
+		WillReturnRows(sqlmock.NewRows([]string{"table_name"}).AddRow("users").AddRow("migrations"))
+	mock.ExpectExec("^SET FOREIGN_KEY_CHECKS = 0$").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `users`")).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `migrations`")).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("^SET FOREIGN_KEY_CHECKS = 1$").WillReturnResult(sqlmock.NewResult(0, 0))
+
+	// Up(): MySQL tracking table DDL and ? placeholders.
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations .*INT AUTO_INCREMENT PRIMARY KEY").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	expectGetApplied(mock, nil)
+	expectMaxBatch(mock, 0)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO migrations (migration, batch) VALUES (?, ?)")).
+		WithArgs("20240101000000_create_users", 1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':', ?))")).
+		WithArgs("go-migration:migrations").
+		WillReturnRows(sqlmock.NewRows([]string{"release"}).AddRow(1))
+
+	if err := m.Fresh(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
 	}
 }
 
@@ -398,15 +545,13 @@ func TestRefresh(t *testing.T) {
 	expectGetApplied(mock, []MigrationRecord{
 		{Name: "20240101000000_create_users", Batch: 1, CreatedAt: time.Now()},
 	})
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240101000000_create_users")
+	expectMigrationTxRemove(mock, "20240101000000_create_users")
 
 	// Up phase: EnsureTable + GetApplied (empty) + NextBatch + Execute + Record
 	expectEnsureTable(mock)
 	expectGetApplied(mock, nil)
 	expectMaxBatch(mock, 0)
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_create_users", 1)
+	expectMigrationTxRecord(mock, "20240101000000_create_users", 1)
 
 	err := m.Refresh()
 	if err != nil {
@@ -468,8 +613,7 @@ func TestUp_AfterHookCalled(t *testing.T) {
 	expectEnsureTable(mock)
 	expectGetApplied(mock, nil)
 	expectMaxBatch(mock, 0)
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_create_users", 1)
+	expectMigrationTxRecord(mock, "20240101000000_create_users", 1)
 
 	err := m.Up()
 	if err != nil {
@@ -510,12 +654,12 @@ func TestWithTableName(t *testing.T) {
 		sqlmock.NewRows([]string{"max"}).AddRow(0),
 	)
 
-	expectMigrationTx(mock)
-
-	// Record into custom table
+	// Record into custom table, inside the migration transaction
+	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO custom_migrations").
 		WithArgs("20240101000000_create_users", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	err = m.Up()
 	if err != nil {
@@ -604,8 +748,7 @@ func TestUp_FailureStopsSubsequent(t *testing.T) {
 	expectMaxBatch(mock, 0)
 
 	// First migration succeeds
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_first", 1)
+	expectMigrationTxRecord(mock, "20240101000000_first", 1)
 
 	// Second migration fails: begin + rollback (no commit, no record)
 	mock.ExpectBegin()
@@ -708,8 +851,7 @@ func TestRefresh_UpPhaseFailure(t *testing.T) {
 	expectGetApplied(mock, []MigrationRecord{
 		{Name: "20240101000000_first", Batch: 1, CreatedAt: time.Now()},
 	})
-	expectMigrationTx(mock)
-	expectRemove(mock, "20240101000000_first")
+	expectMigrationTxRemove(mock, "20240101000000_first")
 
 	// Up phase: both pending, first succeeds, second fails
 	expectEnsureTable(mock)
@@ -717,8 +859,7 @@ func TestRefresh_UpPhaseFailure(t *testing.T) {
 	expectMaxBatch(mock, 0)
 
 	// First migration succeeds
-	expectMigrationTx(mock)
-	expectRecord(mock, "20240101000000_first", 1)
+	expectMigrationTxRecord(mock, "20240101000000_first", 1)
 
 	// Second migration fails
 	mock.ExpectBegin()

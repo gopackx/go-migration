@@ -224,7 +224,7 @@ func TestSQLite_CompileCreate_SimpleTable(t *testing.T) {
 	bp.ID()
 	bp.String("name", 255)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestSQLite_CompileCreate_NoColumns(t *testing.T) {
 	g := newSQLiteGrammar()
 	bp := schema.NewBlueprint("empty")
 
-	_, err := g.CompileCreate(bp)
+	_, err := joinCreate(g.CompileCreate(bp))
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -273,7 +273,7 @@ func TestSQLite_CompileCreate_AllColumnTypes(t *testing.T) {
 	bp.JSON("col_json")
 	bp.Binary("col_bin")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestSQLite_CompileCreate_NullableColumn(t *testing.T) {
 	bp := schema.NewBlueprint("posts")
 	bp.Text("body").Nullable()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestSQLite_CompileCreate_DefaultValue(t *testing.T) {
 	bp.String("status", 50).Default("pending")
 	bp.Integer("count").Default(0)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestSQLite_CompileCreate_UniqueColumn(t *testing.T) {
 	bp := schema.NewBlueprint("users")
 	bp.String("email", 255).Unique()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestSQLite_CompileCreate_WithIndexes(t *testing.T) {
 	bp.Index("name")
 	bp.UniqueIndex("email")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestSQLite_CompileCreate_WithForeignKey(t *testing.T) {
 	bp.BigInteger("user_id")
 	bp.Foreign("user_id").References("id").On("users").OnDeleteAction("CASCADE").OnUpdateAction("SET NULL")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestSQLite_CompileCreate_FullTable(t *testing.T) {
 	bp.Timestamps()
 	bp.Index("name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -458,7 +458,7 @@ func TestSQLite_CompileCreate_CompositeIndex(t *testing.T) {
 	bp.String("last_name", 100)
 	bp.Index("first_name", "last_name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestSQLite_CompileCreate_Timestamps(t *testing.T) {
 	bp.String("title", 255)
 	bp.Timestamps()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -501,7 +501,7 @@ func TestSQLite_CompileCreate_NonPKAutoIncrement(t *testing.T) {
 	bp := schema.NewBlueprint("counters")
 	bp.Integer("seq").AutoIncrement()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -520,7 +520,7 @@ func TestSQLite_CompileCreate_UnsignedIgnored(t *testing.T) {
 	bp := schema.NewBlueprint("items")
 	bp.Integer("quantity").Unsigned()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -736,22 +736,6 @@ func TestSQLite_CompileHasColumn(t *testing.T) {
 	}
 }
 
-// --- CompileDropAllTables test ---
-
-func TestSQLite_CompileDropAllTables(t *testing.T) {
-	g := newSQLiteGrammar()
-	sql := g.CompileDropAllTables()
-	if !strings.Contains(sql, "sqlite_master") {
-		t.Errorf("%q not in %q", "sqlite_master", sql)
-	}
-	if !strings.Contains(sql, "type='table'") {
-		t.Errorf("%q not in %q", "type='table'", sql)
-	}
-	if !strings.Contains(sql, "NOT LIKE 'sqlite_%'") {
-		t.Errorf("%q not in %q", "NOT LIKE 'sqlite_%'", sql)
-	}
-}
-
 // --- Default string escaping ---
 
 func TestSQLite_CompileCreate_DefaultStringEscapesSingleQuotes(t *testing.T) {
@@ -759,7 +743,7 @@ func TestSQLite_CompileCreate_DefaultStringEscapesSingleQuotes(t *testing.T) {
 	bp := schema.NewBlueprint("test")
 	bp.String("val", 100).Default("it's")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -910,7 +894,7 @@ func TestSQLite_CompileCreate_WithEnumColumn(t *testing.T) {
 	bp.String("name", 255)
 	bp.Enum("status", []string{"active", "inactive"})
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -924,7 +908,7 @@ func TestSQLite_CompileCreate_WithCharColumn(t *testing.T) {
 	bp := schema.NewBlueprint("countries")
 	bp.Char("code", 2)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -939,7 +923,7 @@ func TestSQLite_CompileCreate_WithNewTextTypes(t *testing.T) {
 	bp.LongText("body")
 	bp.MediumText("summary")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -957,7 +941,7 @@ func TestSQLite_CompileCreate_WithNewIntTypes(t *testing.T) {
 	bp.TinyInt("priority")
 	bp.SmallInt("score")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -975,7 +959,7 @@ func TestSQLite_CompileCreate_WithFulltextIndex_ReturnsError(t *testing.T) {
 	bp.String("title", 255)
 	bp.FulltextIndex("title")
 
-	_, err := g.CompileCreate(bp)
+	_, err := joinCreate(g.CompileCreate(bp))
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -990,7 +974,7 @@ func TestSQLite_CompileCreate_WithSpatialIndex_ReturnsError(t *testing.T) {
 	bp.String("coords", 255)
 	bp.SpatialIndex("coords")
 
-	_, err := g.CompileCreate(bp)
+	_, err := joinCreate(g.CompileCreate(bp))
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}

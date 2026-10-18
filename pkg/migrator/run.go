@@ -1,9 +1,12 @@
 package migrator
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gopackx/go-migration/internal/generator"
 	"github.com/gopackx/go-migration/internal/logger"
@@ -45,6 +48,28 @@ func (a *migratorAdapter) Reset() error             { return a.m.Reset() }
 func (a *migratorAdapter) Refresh() error           { return a.m.Refresh() }
 func (a *migratorAdapter) Fresh() error             { return a.m.Fresh() }
 
+// migrationLocker adapts Migrator.Lock to commands.Locker for the db:seed*
+// commands, so seeders are serialised with each other and with migrations.
+// As in the Migrator's own operations, a failure to release the lock is only
+// logged: the lock connection has then been discarded, which releases the
+// lock on the server.
+type migrationLocker struct {
+	m *Migrator
+}
+
+func (l *migrationLocker) Lock() (func() error, error) {
+	release, err := l.m.Lock(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		if err := release(); err != nil && l.m.logger != nil {
+			l.m.logger.Error("%v", err)
+		}
+		return nil
+	}, nil
+}
+
 func (a *migratorAdapter) Status() ([]commands.MigrationStatusInfo, error) {
 	statuses, err := a.m.Status()
 	if err != nil {
@@ -82,7 +107,13 @@ func (a *migratorAdapter) Status() ([]commands.MigrationStatusInfo, error) {
 //	}
 func Run() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if errors.Is(err, commands.ErrPendingMigrations) {
+			// migrate:status --check found pending migrations: report the
+			// count without the "Error:" prefix; the exit status is still 1.
+			fmt.Fprintln(os.Stderr, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -160,7 +191,11 @@ func run() error {
 		connManager = database.NewManager()
 		connManager.RegisterDriver("postgres", drivers.NewPostgresDriver())
 		connManager.RegisterDriver("mysql", drivers.NewMySQLDriver())
-		connManager.RegisterDriver("sqlite3", drivers.NewSQLiteDriver())
+		// config accepts both "sqlite" and "sqlite3" as the driver name, so
+		// register the same SQLite driver under both.
+		sqliteDriver := drivers.NewSQLiteDriver()
+		connManager.RegisterDriver("sqlite", sqliteDriver)
+		connManager.RegisterDriver("sqlite3", sqliteDriver)
 
 		// Add all configured connections.
 		for name, connCfg := range cfg.Connections {
@@ -203,6 +238,14 @@ func run() error {
 			opts = append(opts, WithDryRun(os.Stdout))
 		}
 
+		// Migration lock settings (--lock-timeout, --no-lock) on the commands
+		// that change the database.
+		lockOpts, err := lockOptions(flags)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, lockOpts...)
+
 		// Create Migrator with auto-discover.
 		m := New(db, opts...)
 
@@ -222,13 +265,15 @@ func run() error {
 				return fmt.Errorf("register seeder %q: %w", name, err)
 			}
 		}
-		seederRunner := seeder.NewRunner(seederRegistry, db, log)
+		seederRunner := seeder.NewRunner(seederRegistry, db, log,
+			seeder.WithDialect(seederDialect(connCfg.Driver)))
 
 		// Create Generator.
 		gen := generator.NewGenerator(cfg.MigrationDir)
 
-		// Create Tracker for migrate:install command.
-		tracker := NewTracker(db, cfg.MigrationTable)
+		// Create Tracker for migrate:install command, using the connection's
+		// dialect for the tracking table DDL.
+		tracker := NewTrackerWithGrammar(db, cfg.MigrationTable, grammar)
 
 		cmdCtx = &commands.CommandContext{
 			DB:             db,
@@ -236,17 +281,11 @@ func run() error {
 			Seeder:         seederRunner,
 			Generator:      gen,
 			TrackerEnsurer: tracker,
+			Locker:         &migrationLocker{m: m},
 		}
 
 		return nil
 	})
-
-	// --- --seed flag integration ---
-	// The seed flag is handled by wrapping the original handlers.
-	// This is done after registration by re-registering with wrapped handlers.
-	// For simplicity, we handle it in the pre-run or post-run.
-	// Actually, we need to handle --seed for migrate, migrate:fresh, migrate:refresh.
-	// We'll wrap these commands' handlers.
 
 	// Run the CLI.
 	err := app.Run(nil)
@@ -257,6 +296,39 @@ func run() error {
 	}
 
 	return err
+}
+
+// lockOptions converts the --lock-timeout and --no-lock flags, when the
+// command defines them, into Migrator options.
+func lockOptions(flags *flag.FlagSet) ([]Option, error) {
+	var opts []Option
+	if f := flags.Lookup(commands.LockTimeoutFlag); f != nil {
+		getter, ok := f.Value.(flag.Getter)
+		if !ok {
+			return nil, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
+		}
+		d, ok := getter.Get().(time.Duration)
+		if !ok {
+			return nil, fmt.Errorf("--%s: not a duration flag", commands.LockTimeoutFlag)
+		}
+		opts = append(opts, WithLockTimeout(d))
+	}
+	if f := flags.Lookup(commands.NoLockFlag); f != nil && f.Value.String() == "true" {
+		opts = append(opts, WithoutLock())
+	}
+	return opts, nil
+}
+
+// seederDialect maps a configured driver name to the seeder SQL dialect.
+func seederDialect(driver string) seeder.Dialect {
+	switch driver {
+	case "mysql":
+		return seeder.DialectMySQL
+	case "sqlite", "sqlite3":
+		return seeder.DialectSQLite
+	default:
+		return seeder.DialectPostgres
+	}
 }
 
 // loadConfig reads the config file and loads configuration.

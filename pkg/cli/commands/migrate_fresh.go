@@ -34,6 +34,7 @@ func RegisterMigrateFreshCommand(register func(name, desc string, handler func(a
 		func(fs *flag.FlagSet) {
 			force = fs.Bool("force", false, "Force the operation to run without confirmation")
 			fs.Bool("dry-run", false, "Show SQL without executing")
+			AddLockFlags(fs)
 		},
 	)
 }

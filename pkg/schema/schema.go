@@ -27,18 +27,23 @@ func NewBuilder(executor Executor, grammar Grammar) *Builder {
 }
 
 // Create creates a new table by building a Blueprint via the callback,
-// compiling it through the Grammar, and executing the resulting SQL.
+// compiling it through the Grammar, and executing each resulting SQL
+// statement (CREATE TABLE followed by any separate CREATE INDEX statements).
 func (b *Builder) Create(table string, fn func(*Blueprint)) error {
 	bp := NewBlueprint(table)
 	fn(bp)
 
-	sqlStr, err := b.grammar.CompileCreate(bp)
+	stmts, err := b.grammar.CompileCreate(bp)
 	if err != nil {
 		return err
 	}
 
-	_, err = b.executor.Exec(sqlStr)
-	return err
+	for _, stmt := range stmts {
+		if _, err := b.executor.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Alter modifies an existing table by building a Blueprint via the callback,
@@ -83,14 +88,11 @@ func (b *Builder) Rename(from, to string) error {
 }
 
 // HasTable checks whether the given table exists in the database.
+//
+// In dry-run mode (see DryRunExecutor) no query is run: the query is written
+// to the dry-run output and the table is reported as absent (false, nil).
 func (b *Builder) HasTable(table string) (bool, error) {
-	sqlStr := b.grammar.CompileHasTable(table)
-	var count int
-	err := b.executor.QueryRow(sqlStr).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return b.queryExists(b.grammar.CompileHasTable(table))
 }
 
 // RawExec executes one or more raw SQL statements directly against the database.
@@ -106,12 +108,37 @@ func (b *Builder) RawExec(statements ...string) error {
 }
 
 // HasColumn checks whether the given column exists in the given table.
+//
+// In dry-run mode (see DryRunExecutor) no query is run: the query is written
+// to the dry-run output and the column is reported as absent (false, nil).
 func (b *Builder) HasColumn(table, column string) (bool, error) {
-	sqlStr := b.grammar.CompileHasColumn(table, column)
+	return b.queryExists(b.grammar.CompileHasColumn(table, column))
+}
+
+// queryExists runs a COUNT(*) style query and reports whether the count is
+// greater than zero. Dry-run executors return no row, so in dry-run mode the
+// query is only recorded and false is returned.
+func (b *Builder) queryExists(sqlStr string) (bool, error) {
+	if isDryRun(b.executor) {
+		// DryRunExecutor.QueryRow writes the query and returns a nil row.
+		_ = b.executor.QueryRow(sqlStr)
+		return false, nil
+	}
 	var count int
-	err := b.executor.QueryRow(sqlStr).Scan(&count)
-	if err != nil {
+	if err := b.executor.QueryRow(sqlStr).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// dryRunner is implemented by executors that do not touch the database
+// (DryRunExecutor, and RecordingExecutor when wrapping one).
+type dryRunner interface {
+	IsDryRun() bool
+}
+
+// isDryRun reports whether ex is a dry-run executor.
+func isDryRun(ex Executor) bool {
+	d, ok := ex.(dryRunner)
+	return ok && d.IsDryRun()
 }

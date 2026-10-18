@@ -355,7 +355,7 @@ func TestProperty19_BlueprintToSQLRoundTrip(t *testing.T) {
 		bp := drawBlueprint(t, tableName, 1)
 
 		// Step 1: Compile Blueprint to SQL
-		sql, err := grammar.CompileCreate(bp)
+		sql, err := joinCreate(grammar.CompileCreate(bp))
 		if err != nil {
 			// Unsupported types are expected to fail — skip those
 			t.Skip("CompileCreate returned error (unsupported type)")

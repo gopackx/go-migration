@@ -206,7 +206,7 @@ func TestProperty15_BlueprintFeaturesReflectedInSQL(t *testing.T) {
 				tableName := tableNameGen().Draw(t, "table")
 				bp := drawBlueprint(t, tableName, 1)
 
-				sql, err := g.grammar.CompileCreate(bp)
+				sql, err := joinCreate(g.grammar.CompileCreate(bp))
 				if err != nil {
 					// If compilation fails, it should only be for unsupported types
 					if !errors.Is(err, ErrUnsupportedType) {
@@ -319,7 +319,7 @@ func TestProperty16_GrammarProducesValidCreateTableSQL(t *testing.T) {
 				tableName := tableNameGen().Draw(t, "table")
 				bp := drawBlueprint(t, tableName, 1)
 
-				sql, err := g.grammar.CompileCreate(bp)
+				sql, err := joinCreate(g.grammar.CompileCreate(bp))
 				if err != nil {
 					if !errors.Is(err, ErrUnsupportedType) {
 						t.Errorf("CompileCreate error should be ErrUnsupportedType, got: %v", err)

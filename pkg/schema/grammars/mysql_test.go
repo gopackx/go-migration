@@ -277,7 +277,7 @@ func TestMySQL_CompileCreate_SimpleTable(t *testing.T) {
 	bp.ID()
 	bp.String("name", 255)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestMySQL_CompileCreate_NoColumns(t *testing.T) {
 	g := newMySQLGrammar()
 	bp := schema.NewBlueprint("empty")
 
-	_, err := g.CompileCreate(bp)
+	_, err := joinCreate(g.CompileCreate(bp))
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -325,7 +325,7 @@ func TestMySQL_CompileCreate_AllColumnTypes(t *testing.T) {
 	bp.JSON("col_json")
 	bp.Binary("col_bin")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestMySQL_CompileCreate_NullableColumn(t *testing.T) {
 	bp := schema.NewBlueprint("posts")
 	bp.Text("body").Nullable()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestMySQL_CompileCreate_DefaultValue(t *testing.T) {
 	bp.String("status", 50).Default("pending")
 	bp.Integer("count").Default(0)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestMySQL_CompileCreate_UniqueColumn(t *testing.T) {
 	bp := schema.NewBlueprint("users")
 	bp.String("email", 255).Unique()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestMySQL_CompileCreate_WithIndexes(t *testing.T) {
 	bp.Index("name")
 	bp.UniqueIndex("email")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestMySQL_CompileCreate_WithForeignKey(t *testing.T) {
 	bp.BigInteger("user_id")
 	bp.Foreign("user_id").References("id").On("users").OnDeleteAction("CASCADE").OnUpdateAction("SET NULL")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestMySQL_CompileCreate_FullTable(t *testing.T) {
 	bp.Timestamps()
 	bp.Index("name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -731,16 +731,6 @@ func TestMySQL_CompileHasColumn(t *testing.T) {
 	}
 }
 
-// --- CompileDropAllTables test ---
-
-func TestMySQL_CompileDropAllTables(t *testing.T) {
-	g := newMySQLGrammar()
-	sql := g.CompileDropAllTables()
-	if !strings.Contains(sql, "SET FOREIGN_KEY_CHECKS = 0") {
-		t.Errorf("%q not in %q", "SET FOREIGN_KEY_CHECKS = 0", sql)
-	}
-}
-
 // --- Grammar interface compliance ---
 
 func TestMySQLGrammar_ImplementsGrammar(t *testing.T) {
@@ -756,7 +746,7 @@ func TestMySQL_CompileCreate_CompositeIndex(t *testing.T) {
 	bp.String("last_name", 100)
 	bp.Index("first_name", "last_name")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -770,7 +760,7 @@ func TestMySQL_CompileCreate_DefaultStringEscapesSingleQuotes(t *testing.T) {
 	bp := schema.NewBlueprint("test")
 	bp.String("val", 100).Default("it's")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -785,7 +775,7 @@ func TestMySQL_CompileCreate_Timestamps(t *testing.T) {
 	bp.String("title", 255)
 	bp.Timestamps()
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -961,7 +951,7 @@ func TestMySQL_CompileCreate_WithEnumColumn(t *testing.T) {
 	bp.String("name", 255)
 	bp.Enum("status", []string{"active", "inactive"})
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -975,7 +965,7 @@ func TestMySQL_CompileCreate_WithCharColumn(t *testing.T) {
 	bp := schema.NewBlueprint("countries")
 	bp.Char("code", 2)
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -990,7 +980,7 @@ func TestMySQL_CompileCreate_WithNewTextTypes(t *testing.T) {
 	bp.LongText("body")
 	bp.MediumText("summary")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1008,7 +998,7 @@ func TestMySQL_CompileCreate_WithNewIntTypes(t *testing.T) {
 	bp.TinyInt("priority")
 	bp.SmallInt("score")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1028,7 +1018,7 @@ func TestMySQL_CompileCreate_WithFulltextIndex(t *testing.T) {
 	bp.String("title", 255)
 	bp.FulltextIndex("title")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1043,7 +1033,7 @@ func TestMySQL_CompileCreate_WithSpatialIndex(t *testing.T) {
 	bp.String("coords", 255)
 	bp.SpatialIndex("coords")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1093,7 +1083,7 @@ func TestMySQL_CompileCreate_WithMultiColumnFulltextIndex(t *testing.T) {
 	bp.Text("body")
 	bp.FulltextIndex("title", "body")
 
-	sql, err := g.CompileCreate(bp)
+	sql, err := joinCreate(g.CompileCreate(bp))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

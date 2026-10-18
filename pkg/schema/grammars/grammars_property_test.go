@@ -119,7 +119,7 @@ func TestProperty4_FulltextSpatialIndexCompilationProducesGrammarAppropriateSQL(
 			}
 			bp.FulltextIndex(cols...)
 
-			sql, err := pgGrammar.CompileCreate(bp)
+			sql, err := joinCreate(pgGrammar.CompileCreate(bp))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -167,7 +167,7 @@ func TestProperty4_FulltextSpatialIndexCompilationProducesGrammarAppropriateSQL(
 			}
 			bp.FulltextIndex(cols...)
 
-			sql, err := myGrammar.CompileCreate(bp)
+			sql, err := joinCreate(myGrammar.CompileCreate(bp))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -209,7 +209,7 @@ func TestProperty4_FulltextSpatialIndexCompilationProducesGrammarAppropriateSQL(
 			}
 			bp.SpatialIndex(cols...)
 
-			sql, err := pgGrammar.CompileCreate(bp)
+			sql, err := joinCreate(pgGrammar.CompileCreate(bp))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -251,7 +251,7 @@ func TestProperty4_FulltextSpatialIndexCompilationProducesGrammarAppropriateSQL(
 			}
 			bp.SpatialIndex(cols...)
 
-			sql, err := myGrammar.CompileCreate(bp)
+			sql, err := joinCreate(myGrammar.CompileCreate(bp))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -299,7 +299,7 @@ func TestProperty5_SQLiteGrammarRejectsFulltextAndSpatialIndexes(t *testing.T) {
 			}
 			bp.FulltextIndex(cols...)
 
-			_, err := sqliteGrammar.CompileCreate(bp)
+			_, err := joinCreate(sqliteGrammar.CompileCreate(bp))
 			if err == nil {
 				t.Errorf("expected error, got nil")
 			}
@@ -333,7 +333,7 @@ func TestProperty5_SQLiteGrammarRejectsFulltextAndSpatialIndexes(t *testing.T) {
 			}
 			bp.SpatialIndex(cols...)
 
-			_, err := sqliteGrammar.CompileCreate(bp)
+			_, err := joinCreate(sqliteGrammar.CompileCreate(bp))
 			if err == nil {
 				t.Errorf("expected error, got nil")
 			}
