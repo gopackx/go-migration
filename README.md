@@ -168,6 +168,7 @@ m := migrator.New(db,
     migrator.WithGrammar(&grammars.PostgresGrammar{}),
     migrator.WithTableName("migrations"),  // default: "migrations"
     migrator.WithLogger(myLogger),
+    migrator.WithLockTimeout(time.Minute),  // default: 30s; see "Concurrency and locking"
 )
 
 m.Register("20260101120000_create_users", &CreateUsersTable{})
@@ -178,8 +179,12 @@ m.Rollback(3)       // Rollback last 3 migrations
 m.Reset()           // Rollback all migrations
 m.Refresh()         // Reset + Up
 m.Fresh()           // Drop all tables + Up (requires grammar)
-m.Status()          // []MigrationStatus
+m.Status()          // []MigrationStatus (read-only, takes no lock)
 ```
+
+`Up`, `Rollback`, `Reset`, `Refresh` and `Fresh` hold a cross-process lock while
+they run, so several processes can call them at the same time safely. See
+[Concurrency and locking](#concurrency-and-locking).
 
 ### Transaction opt-out
 
@@ -249,7 +254,8 @@ if err := m.Up(); err != nil {
 
 Exported sentinels include `ErrMigrationNotFound`, `ErrDuplicateMigration`,
 `ErrInvalidMigrationName`, `ErrTransactionFailed`, `ErrTrackingTable`,
-`ErrConnectionFailed`, `ErrSeederNotFound`, `ErrCircularDependency`, and more.
+`ErrLockTimeout`, `ErrConnectionFailed`, `ErrSeederNotFound`,
+`ErrCircularDependency`, and more.
 For richer context (failing SQL, position), use `errors.As` with
 `*migrator.MigrationError`.
 
@@ -318,9 +324,15 @@ admin := f.WithState("admin").Make()
 import "github.com/gopackx/go-migration/pkg/database"
 import "github.com/gopackx/go-migration/pkg/database/drivers"
 
+// The database/sql drivers must be blank-imported somewhere in your program:
+//   _ "github.com/lib/pq"
+//   _ "github.com/go-sql-driver/mysql"
+//   _ "modernc.org/sqlite"
+
 mgr := database.NewManager()
 mgr.RegisterDriver("postgres", &drivers.PostgresDriver{})
 mgr.RegisterDriver("mysql", &drivers.MySQLDriver{})
+mgr.RegisterDriver("sqlite", &drivers.SQLiteDriver{})
 
 mgr.AddConnection("primary", database.ConnectionConfig{
     Driver:   "postgres",
@@ -349,7 +361,9 @@ defer mgr.Close()
 
 ## CLI
 
-The package includes a CLI built with Cobra. Build it from `cmd/migrator/`:
+The package includes a CLI. It has no third-party CLI dependency: commands are
+dispatched by a small hand-written router in `pkg/cli` on top of the standard
+`flag` package. Build it from `cmd/migrator/`:
 
 ```bash
 go build -o migrator ./cmd/migrator
@@ -359,16 +373,44 @@ Available commands:
 
 | Command | Description |
 |---|---|
-| `migrate` | Run all pending migrations |
-| `migrate:rollback` | Rollback last batch (use `--step N` for N migrations) |
-| `migrate:reset` | Rollback all migrations |
-| `migrate:refresh` | Reset + migrate up |
-| `migrate:fresh` | Drop all tables + migrate up |
-| `migrate:status` | Show migration status |
+| `init` | Scaffold a new project (`migration.json`, `cmd/migrator/main.go`, directories) |
+| `migrate` | Run all pending migrations (`--dry-run`) |
+| `migrate:rollback` | Rollback last batch (use `--step N` for N migrations; `--dry-run`) |
+| `migrate:reset` | Rollback all migrations (`--force`, `--dry-run`) |
+| `migrate:refresh` | Reset + migrate up (`--dry-run`) |
+| `migrate:fresh` | Drop all tables + migrate up (`--force`, `--dry-run`) |
+| `migrate:status` | Show migration status; read-only (`--check` exits 1 if any migration is pending) |
 | `migrate:install` | Create the migration tracking table |
 | `make:migration` | Generate a migration file (`--create` or `--table` flags) |
 | `make:seeder` | Generate a seeder file |
-| `db:seed` | Run seeders (`--class` flag for specific seeder) |
+| `make:factory` | Generate a factory file |
+| `db:seed` | Run seeders (`--class` for a specific seeder, `--tag` to filter) |
+| `db:seed:rollback` | Roll back one seeder (`--class`, seeder must implement `Rollback`) |
+| `db:seed:truncate` | Delete all rows from a table (`--table`) |
+
+The commands that change the database (`migrate`, `migrate:rollback`,
+`migrate:reset`, `migrate:refresh`, `migrate:fresh`, `db:seed`,
+`db:seed:rollback`, `db:seed:truncate`) also accept `--lock-timeout <duration>`
+(default `30s`) and `--no-lock`; see
+[Concurrency and locking](#concurrency-and-locking).
+
+`migrate:status` never writes: if the tracking table does not exist it reports
+every migration as pending without creating it, and it does not wait for the
+migration lock. With `--check` it prints the status table as usual and then, if
+anything is pending, prints `N migration(s) pending` to stderr and exits with
+status 1, so it can be used as a readiness gate (e.g. a Kubernetes
+initContainer that waits for the migration Job):
+
+```bash
+until ./migrator migrate:status --check; do sleep 5; done
+```
+
+Names passed to `make:migration`, `make:seeder` and `make:factory` must be lower
+snake_case (`^[a-z][a-z0-9_]*$`, e.g. `create_orders_table`); the generator
+derives the timestamped file name and the Go type name from it.
+
+`--dry-run` needs the tracking table to exist; run `migrate:install` once
+first (see [Database-specific behaviour](#database-specific-behaviour)).
 
 ```bash
 # Run migrations
@@ -445,17 +487,174 @@ The pattern is always the same: open a `*sql.DB`, create a `migrator.New(db)`, r
 
 ## Supported Databases
 
-- PostgreSQL
-- MySQL
-- SQLite
+| Database   | `driver` in config     | Grammar                       | `database/sql` driver (blank import)  |
+|------------|------------------------|-------------------------------|---------------------------------------|
+| PostgreSQL | `postgres`             | `grammars.NewPostgresGrammar()` | `_ "github.com/lib/pq"`             |
+| MySQL      | `mysql`                | `grammars.NewMySQLGrammar()`    | `_ "github.com/go-sql-driver/mysql"` |
+| SQLite     | `sqlite` or `sqlite3`  | `grammars.NewSQLiteGrammar()`   | `_ "modernc.org/sqlite"`            |
+
+- **SQLite** uses [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite), a
+  pure-Go driver registered as `"sqlite"`, so the CLI builds with
+  `CGO_ENABLED=0`. In the config both `"sqlite"` and `"sqlite3"` are accepted as
+  the driver name; `host`, `port`, `username` and `password` are not required —
+  `database` is the file path (or `:memory:`), and `options` are appended to the
+  DSN as query parameters, e.g. `"options": {"_pragma": "foreign_keys(1)"}`.
+  With `sql.Open` directly, use `sql.Open("sqlite", "app.db?_pragma=foreign_keys(1)")`.
+  SQLite allows one writer at a time, so `db.SetMaxOpenConns(1)` is recommended.
+- **MySQL**: the driver adds `parseTime=true` to the DSN unless you set
+  `parseTime` yourself in `options`, so `DATETIME`/`TIMESTAMP` columns scan into
+  `time.Time`.
+
+### Database-specific behaviour
+
+**`Fresh()` / `migrate:fresh`** drops every table and then runs all migrations
+in batch 1:
+
+- PostgreSQL: `DROP SCHEMA public CASCADE` followed by `CREATE SCHEMA public`.
+  Everything else in the `public` schema (views, sequences, functions, types)
+  is dropped too, and privileges granted on the schema are reset.
+- MySQL: lists the base tables of the current database and drops each one with
+  `SET FOREIGN_KEY_CHECKS = 0` on the same connection.
+- SQLite: lists the tables in `sqlite_master` and drops each one with
+  `PRAGMA foreign_keys = OFF` on the same connection.
+
+The connection used for the MySQL/SQLite drops is closed afterwards rather than
+returned to the pool, so the disabled foreign key checks never leak into later
+queries.
+
+**Transactions.** Each migration runs in a transaction (unless it implements
+`TransactionOption`), and its row in the tracking table is written on that same
+transaction, so a failed migration leaves no tracking row behind. On PostgreSQL
+and SQLite, DDL is transactional too, so a failed migration is rolled back
+completely. **MySQL commits DDL implicitly** (`CREATE`, `ALTER`, `DROP`, …): only
+DML (`INSERT`/`UPDATE`/`DELETE`) is rolled back with the tracking row, and a
+migration that fails after some DDL leaves that DDL applied. Keep MySQL
+migrations small (ideally one DDL statement each) so a failure is easy to repair.
+
+**Dry-run** (`WithDryRun(w)`, `--dry-run`) prints the SQL instead of executing
+it and never writes to the database — not even the tracking table. It still
+reads the tracking table to find pending migrations, so the table must already
+exist: run `migrate:install` (or `migrator.NewTrackerWithGrammar(db, table,
+grammar).EnsureTable()`) first; otherwise dry-run fails with
+`ErrTrackingTable`. `HasTable`/`HasColumn` report `false` in dry-run mode.
+
+## Concurrency and locking
+
+Running migrations from several processes at once — for example a Kubernetes
+Job whose pods start together, or every replica of an app migrating on boot —
+is safe: `Up`, `Rollback`, `Reset`, `Refresh` (one lock across both phases) and
+`Fresh` (locked before anything is dropped) take a cross-process lock before
+touching the tracking table, and compute the pending/applied migrations only
+once they hold it. A second process waits, then finds nothing left to do. The
+CLI's `db:seed`, `db:seed:rollback` and `db:seed:truncate` take the same lock,
+so seeders do not run concurrently with each other or with migrations.
+Dry-run takes the lock too; `Status` / `migrate:status` does not.
+
+How the lock works per database:
+
+- **PostgreSQL**: a session-level advisory lock,
+  `pg_try_advisory_lock(hashtext('go-migration:<table>'))`. Advisory locks are
+  scoped to the current database.
+- **MySQL**: a named lock, `GET_LOCK(CONCAT(DATABASE(), ':', 'go-migration:<table>'), 0)`.
+  `GET_LOCK` names are server-wide, so the name includes the database.
+- **SQLite**: no explicit lock; SQLite's database file lock already serialises
+  writers.
+
+`<table>` is the tracking table name, so migration sets that use different
+tracking tables (`WithTableName`) do not block each other.
+
+The lock is taken without blocking and retried with a short backoff (100 ms,
+doubling up to 1 s) until it is acquired or the lock timeout elapses; the
+operation then fails with `migrator.ErrLockTimeout` (`could not acquire
+migration lock within 30s ...`) without having changed anything.
+
+- Library: `migrator.WithLockTimeout(d)` (default 30s; `0` means a single
+  attempt) and `migrator.WithoutLock()` to disable locking. `m.Lock(ctx)`
+  acquires the lock and returns a `release` function, if you need to
+  serialise your own work with migrations.
+- CLI: `--lock-timeout 2m` and `--no-lock` on the commands listed above.
+
+The lock is held on a dedicated connection taken from the pool for the
+duration of the operation, so with locking enabled on PostgreSQL/MySQL the
+pool needs **at least two connections** (`MaxOpenConns >= 2`, or `0` for
+unlimited): one holds the lock, the other runs the migrations. A pool limited
+to one connection is rejected with an error suggesting a larger pool or
+`WithoutLock` / `--no-lock`. SQLite takes no lock, so `SetMaxOpenConns(1)` is
+fine there. If releasing the lock fails, its connection is closed instead of
+being returned to the pool, which makes the server drop the lock.
+
+Session-level locks need a real session: behind a transaction-pooling proxy
+(e.g. PgBouncer in `transaction` mode) connect the migrator directly to the
+database or use session pooling.
+
+## Upgrading: custom `Grammar` implementations
+
+If you implement `schema.Grammar` yourself, the interface changed:
+
+- `CompileCreate(bp) ([]string, error)` now returns a slice — the `CREATE TABLE`
+  statement followed by any separate `CREATE INDEX` statements, each executed
+  individually.
+- `CompileDropAllTables(tables []string) []string` receives the table list
+  produced by `CompileListTables()` and returns the statements to run, in order,
+  on one connection (it was previously `CompileDropAllTables() string`).
+- `CompileCreate` was previously `CompileCreate(bp) (string, error)`.
+- New methods:
+  - `CompileListTables() string` — a query returning one row per table name.
+  - `CompileTrackingTable(table string) string` — `CREATE TABLE IF NOT EXISTS`
+    for the tracking table (`id`, `migration` unique, `batch`, `created_at`).
+  - `Placeholder(index int) string` — the bind parameter for the 1-based index
+    (`$1` on PostgreSQL, `?` on MySQL/SQLite).
+  - `CompileTryLock(key string) string` and `CompileUnlock(key string) string` —
+    queries that take the lock key as their only bind parameter
+    (`Placeholder(1)`) and return one boolean-ish column (1/true = acquired /
+    released; 0, false or NULL = not). The lock must be session-level, not
+    transaction-level. Return `""` from both if the database needs no
+    migration lock (as SQLite does). See
+    [Concurrency and locking](#concurrency-and-locking).
+
+The built-in grammars already implement all of these. The tracker now uses the
+grammar passed with `WithGrammar` (it falls back to PostgreSQL syntax when no
+grammar is given), so always pass `WithGrammar` for MySQL and SQLite.
 
 ## Testing
 
+The tests are split in two:
+
+**Unit tests** (the default) need no database. They use the standard `testing`
+package, [go-sqlmock](https://github.com/DATA-DOG/go-sqlmock) for SQL
+expectations, and property-based tests with
+[pgregory.net/rapid](https://pkg.go.dev/pgregory.net/rapid):
+
 ```bash
-go test ./...
+go test ./...        # or: make test
 ```
 
-The project uses property-based testing with [pgregory.net/rapid](https://pkg.go.dev/pgregory.net/rapid) alongside standard unit tests with [testify](https://github.com/stretchr/testify).
+**Integration tests** live in `tests/integration` behind the `integration` build
+tag and run the migrator and seeder against real databases through the public
+API (Up/Rollback/Reset/Refresh/Fresh, hooks, dry-run, transaction opt-out,
+schema builder, seeders, read-only status, and concurrent migrators competing
+for the migration lock on PostgreSQL/MySQL). SQLite always runs, on a fresh temporary file per
+test. PostgreSQL and MySQL run only when their DSN is set, and are skipped
+otherwise:
+
+```bash
+export GOMIGRATE_TEST_POSTGRES_DSN="postgres://postgres:postgres@localhost:5432/gomigrate_test?sslmode=disable"
+export GOMIGRATE_TEST_MYSQL_DSN="root:root@tcp(127.0.0.1:3306)/gomigrate_test?parseTime=true"
+
+go test -count=1 -tags integration ./tests/integration/...   # or: make test-integration
+```
+
+> **Warning:** the integration tests wipe the PostgreSQL/MySQL databases they
+> are pointed at (they call `Fresh()` before every test). Use throwaway
+> databases, e.g.:
+>
+> ```bash
+> docker run -d --name gm-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=gomigrate_test -p 5432:5432 postgres:16
+> docker run -d --name gm-mysql -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=gomigrate_test -p 3306:3306 mysql:8
+> ```
+
+CI (`.github/workflows/ci.yml`) runs `go vet`, the unit tests, and the
+integration tests against PostgreSQL 16 and MySQL 8 service containers.
 
 ## License
 

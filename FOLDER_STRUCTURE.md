@@ -1,349 +1,213 @@
-# Go Migrator - Folder Structure
+# go-migration - Folder Structure
 
-## Complete Project Structure
+This is the actual layout of the repository (generated from `git ls-files`).
+Test files (`*_test.go`, including rapid property tests named
+`*_property_test.go`) live next to the code they test and are omitted from the
+tree below unless noted.
 
 ```
-go-migrator/
+go-migration/
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                    # go vet, unit tests, integration tests (Postgres 16, MySQL 8, SQLite)
 │
 ├── cmd/
-│   └── migrator/                      # CLI Entry Point
-│       ├── main.go                    # Main application
-│       └── version.go                 # Version info
+│   └── migrator/                     # CLI entry point (blank-imports the DB drivers, calls migrator.Run)
+│       ├── main.go
+│       └── version.go                # Version / BuildDate, set via -ldflags
 │
-├── pkg/                               # Public API (dapat diimport package lain)
+├── pkg/                              # Public API
+│   ├── migrator/                     # Core migration engine
+│   │   ├── migrator.go               # Migrator: Up, Rollback, Reset, Refresh, Fresh, Status, options
+│   │   ├── lock.go                   # Cross-process migration lock (Lock, WithLockTimeout, WithoutLock)
+│   │   ├── interfaces.go             # Migration and TransactionOption interfaces
+│   │   ├── registry.go               # Migration registry (name validation, sorted order)
+│   │   ├── auto_registry.go          # Global AutoRegister used by generated migrations' init()
+│   │   ├── runner.go                 # Executes Up/Down in a transaction (or not), dry-run
+│   │   ├── tracker.go                # Tracking table access (dialect-aware via Grammar)
+│   │   ├── batch.go                  # Batch numbering and last-batch / last-N lookups
+│   │   ├── hooks.go                  # Before/after migration hooks
+│   │   ├── grammar_resolver.go       # Driver name -> Grammar (used by the CLI)
+│   │   ├── run.go                    # migrator.Run(): config loading, connections, CLI wiring
+│   │   ├── errors.go                 # Sentinel errors (and aliases of other packages' sentinels)
+│   │   └── migration_error.go        # MigrationError (failing migration, SQL, cause)
 │   │
-│   ├── migrator/                      # Core Migration Engine
-│   │   ├── migrator.go               # Main migrator implementation
-│   │   ├── interfaces.go             # Public interfaces
-│   │   ├── migration.go              # Migration struct & base
-│   │   ├── registry.go               # Migration registry
-│   │   ├── runner.go                 # Migration execution engine
-│   │   ├── tracker.go                # Database migration tracking
-│   │   ├── batch.go                  # Batch management
-│   │   ├── hooks.go                  # Before/After hooks
-│   │   └── errors.go                 # Custom errors
+│   ├── schema/                       # Schema builder
+│   │   ├── schema.go                 # Builder: Create, Alter, Drop, Rename, HasTable, HasColumn, RawExec
+│   │   ├── blueprint.go              # Blueprint: columns, indexes, foreign keys, alter commands
+│   │   ├── column.go                 # Column types and modifiers
+│   │   ├── index.go                  # Index definitions (.Named)
+│   │   ├── foreign_key.go            # Foreign key definitions
+│   │   ├── raw_expression.go         # Raw SQL default values (DefaultRaw)
+│   │   ├── grammar.go                # Grammar interface
+│   │   ├── dry_run_executor.go       # Executor that prints SQL instead of running it
+│   │   ├── recording_executor.go     # Executor wrapper that remembers the last SQL (for errors)
+│   │   └── grammars/                 # Dialect implementations
+│   │       ├── postgres.go
+│   │       ├── mysql.go
+│   │       └── sqlite.go
 │   │
-│   ├── schema/                        # Schema Builder (Laravel-like)
-│   │   ├── schema.go                 # Schema interface implementation
-│   │   ├── blueprint.go              # Table blueprint
-│   │   ├── column.go                 # Column definitions
-│   │   ├── index.go                  # Index builder
-│   │   ├── foreign_key.go            # Foreign key builder
-│   │   ├── grammar.go                # Base SQL grammar
-│   │   │
-│   │   └── grammars/                 # Database-specific SQL generators
-│   │       ├── postgres.go           # PostgreSQL grammar
-│   │       ├── mysql.go              # MySQL grammar
-│   │       ├── sqlite.go             # SQLite grammar
-│   │       └── sqlserver.go          # SQL Server grammar (optional)
-│   │
-│   ├── seeder/                        # Seeding System
-│   │   ├── seeder.go                 # Seeder interface
-│   │   ├── runner.go                 # Seeder execution engine
+│   ├── seeder/                       # Seeding system
+│   │   ├── interfaces.go             # Seeder, DependentSeeder, TaggedSeeder, RollbackableSeeder
 │   │   ├── registry.go               # Seeder registry
-│   │   ├── interfaces.go             # Public interfaces
-│   │   │
-│   │   └── factory/                  # Factory Pattern
-│   │       ├── factory.go            # Factory implementation
-│   │       ├── builder.go            # Fluent builder
+│   │   ├── auto_registry.go          # Global AutoRegister used by generated seeders' init()
+│   │   ├── runner.go                 # Dependency-ordered execution, tags, rollback, truncate
+│   │   ├── batch_insert.go           # CreateMany / CreateManyWithDialect (chunked multi-row INSERT)
+│   │   ├── errors.go                 # Sentinel errors
+│   │   └── factory/                  # Generic factories
+│   │       ├── factory.go            # Factory[T]: Make, MakeMany, states
 │   │       ├── faker.go              # Faker interface
-│   │       ├── faker_impl.go         # Faker implementation
-│   │       └── state.go              # Factory states
+│   │       └── faker_impl.go         # Default Faker implementation
 │   │
-│   ├── database/                      # Database Connection Management
-│   │   ├── connection.go             # Connection interface
-│   │   ├── manager.go                # Multi-connection manager
-│   │   ├── pool.go                   # Connection pooling
-│   │   ├── transaction.go            # Transaction wrapper
-│   │   │
-│   │   └── drivers/                  # Database Drivers
+│   ├── database/                     # Connection management
+│   │   ├── connection.go             # ConnectionConfig
+│   │   ├── manager.go                # Named multi-connection manager
+│   │   ├── pool.go                   # Pool settings helper
+│   │   ├── transaction.go            # Transaction helper
+│   │   ├── errors.go                 # Sentinel errors
+│   │   └── drivers/                  # DSN builders / sql.Open wrappers
 │   │       ├── driver.go             # Driver interface
-│   │       ├── postgres.go           # PostgreSQL driver
-│   │       ├── mysql.go              # MySQL driver
-│   │       └── sqlite.go             # SQLite driver
+│   │       ├── pool.go               # Pool settings helper
+│   │       ├── postgres.go           # lib/pq ("postgres")
+│   │       ├── mysql.go              # go-sql-driver/mysql ("mysql", adds parseTime=true by default)
+│   │       └── sqlite.go             # modernc.org/sqlite ("sqlite", pure Go)
 │   │
-│   └── cli/                           # CLI Commands Package
-│       ├── app.go                    # CLI application setup
-│       ├── context.go                # CLI context
-│       │
-│       └── commands/                 # CLI Commands
+│   ├── config/                       # Configuration (JSON, deprecated YAML, env interpolation)
+│   │   ├── config.go                 # Config structs, loading, defaults, validation
+│   │   └── interpolate.go            # ${ENV_VAR} interpolation
+│   │
+│   └── cli/                          # Command-line interface (hand-written router on the flag package)
+│       ├── app.go                    # App setup and command registration
+│       ├── router.go                 # Command router / help output
+│       ├── context.go                # Shared CLI context
+│       └── commands/                 # One file per command
+│           ├── context.go            # CommandContext passed to handlers (incl. Locker)
+│           ├── lock_flags.go         # --lock-timeout / --no-lock flags
+│           ├── confirm.go            # Confirmation prompt for destructive commands
+│           ├── init.go               # init
 │           ├── migrate.go            # migrate
-│           ├── migrate_status.go     # migrate:status
+│           ├── migrate_status.go     # migrate:status (read-only; --check)
 │           ├── migrate_rollback.go   # migrate:rollback
 │           ├── migrate_reset.go      # migrate:reset
 │           ├── migrate_refresh.go    # migrate:refresh
 │           ├── migrate_fresh.go      # migrate:fresh
-│           ├── migrate_install.go    # migrate:install (create table)
+│           ├── migrate_install.go    # migrate:install
 │           ├── make_migration.go     # make:migration
-│           ├── seed.go               # db:seed
 │           ├── make_seeder.go        # make:seeder
-│           └── root.go               # Root command
+│           ├── make_factory.go       # make:factory
+│           ├── seed.go               # db:seed
+│           ├── seed_rollback.go      # db:seed:rollback
+│           └── seed_truncate.go      # db:seed:truncate
 │
-├── internal/                          # Private Implementation (tidak bisa diimport)
-│   │
-│   ├── config/                       # Configuration Management
-│   │   ├── config.go                 # Config struct & loader
-│   │   ├── parser.go                 # YAML/JSON parser
-│   │   ├── validator.go              # Config validation
-│   │   └── defaults.go               # Default values
-│   │
-│   ├── logger/                       # Logging System
-│   │   ├── logger.go                 # Logger interface
-│   │   ├── console.go                # Console logger
-│   │   ├── file.go                   # File logger
-│   │   └── formatter.go              # Log formatters
-│   │
-│   ├── scanner/                      # File Scanner
-│   │   ├── migration_scanner.go      # Scan migration files
-│   │   ├── seeder_scanner.go         # Scan seeder files
-│   │   └── loader.go                 # Dynamic loading
-│   │
-│   ├── generator/                    # Code Generator
-│   │   ├── migration.go              # Migration generator
-│   │   ├── seeder.go                 # Seeder generator
-│   │   ├── template.go               # Template engine
-│   │   └── formatter.go              # Code formatter
-│   │
-│   └── utils/                        # Internal Utilities
-│       ├── string.go                 # String helpers
-│       ├── file.go                   # File helpers
-│       ├── time.go                   # Time helpers
-│       ├── reflect.go                # Reflection helpers
-│       └── sql.go                    # SQL helpers
+├── internal/                         # Private implementation
+│   ├── generator/                    # Code generation for make:* and init
+│   │   ├── generator.go              # Migration / seeder / factory generators
+│   │   ├── init.go                   # Project scaffolding (init)
+│   │   └── templates/                # Embedded (go:embed) templates — the only templates used
+│   │       ├── migration.go.tmpl
+│   │       ├── migration_create.go.tmpl
+│   │       ├── migration_alter.go.tmpl
+│   │       ├── seeder.go.tmpl
+│   │       ├── factory.go.tmpl
+│   │       ├── init_main.go.tmpl
+│   │       ├── init_config.json.tmpl
+│   │       └── init_config.yaml.tmpl
+│   ├── logger/
+│   │   └── logger.go                 # Leveled console/file logger
+│   ├── scanner/
+│   │   └── scanner.go                # Discovers migration/seeder files by name pattern
+│   └── utils/
+│       └── utils.go                  # String, timestamp and file helpers
 │
-├── examples/                          # Usage Examples
-│   │
-│   ├── basic/                        # Basic usage example
-│   │   ├── main.go
-│   │   ├── migrations/
-│   │   │   ├── 20240215000001_create_users_table.go
-│   │   │   └── 20240215000002_create_posts_table.go
-│   │   └── seeders/
-│   │       ├── user_seeder.go
-│   │       └── post_seeder.go
-│   │
-│   ├── advanced/                     # Advanced features
-│   │   ├── main.go
-│   │   ├── migrations/
-│   │   │   ├── 20240215000001_create_multi_tenant.go
-│   │   │   └── 20240215000002_add_indexes.go
-│   │   ├── seeders/
-│   │   │   └── tenant_seeder.go
-│   │   └── factories/
-│   │       └── factories.go
-│   │
-│   └── multi-database/               # Multiple database example
-│       ├── main.go
-│       ├── config.yaml
-│       └── migrations/
-│           ├── postgres/
-│           └── mysql/
+├── tests/
+│   ├── integration/                  # Integration tests (build tag "integration")
+│   │   ├── backend_test.go           # Backends (SQLite always; Postgres/MySQL via DSN env vars) and helpers
+│   │   ├── migrations_test.go        # Migrations used by the scenarios
+│   │   ├── migrator_test.go          # Up/Status/Rollback/Reset/Refresh/Fresh, hooks, dry-run, transactions
+│   │   ├── lock_test.go              # Concurrent migrators, lock timeout, read-only Status
+│   │   └── seeder_test.go            # Seeder dependency order, CreateManyWithDialect, Truncate
+│   ├── e2e/                          # (placeholder, empty)
+│   ├── fixtures/                     # (placeholder, empty)
+│   ├── mocks/                        # (placeholder, empty)
+│   ├── testutil/                     # (placeholder, empty)
+│   └── unit/                         # (placeholder, empty — unit tests live next to the code)
 │
-├── tests/                             # Test Suite
-│   │
-│   ├── unit/                         # Unit Tests
-│   │   ├── migrator/
-│   │   │   ├── migrator_test.go
-│   │   │   ├── runner_test.go
-│   │   │   └── tracker_test.go
-│   │   ├── schema/
-│   │   │   ├── blueprint_test.go
-│   │   │   └── grammar_test.go
-│   │   └── seeder/
-│   │       ├── factory_test.go
-│   │       └── faker_test.go
-│   │
-│   ├── integration/                  # Integration Tests
-│   │   ├── postgres_test.go
-│   │   ├── mysql_test.go
-│   │   ├── sqlite_test.go
-│   │   └── migration_flow_test.go
-│   │
-│   ├── e2e/                          # End-to-End Tests
-│   │   ├── cli_test.go
-│   │   └── workflow_test.go
-│   │
-│   ├── fixtures/                     # Test Fixtures
-│   │   ├── migrations/
-│   │   ├── seeders/
-│   │   └── databases/
-│   │
-│   ├── mocks/                        # Mock Objects
-│   │   ├── mock_db.go
-│   │   ├── mock_migrator.go
-│   │   └── mock_seeder.go
-│   │
-│   └── testutil/                     # Test Utilities
-│       ├── database.go               # Test database setup
-│       ├── assertions.go             # Custom assertions
-│       └── helpers.go                # Test helpers
+├── examples/                         # Framework integration examples
+│   ├── echo/      (main.go, README.md)
+│   ├── fiber/     (main.go, README.md)
+│   ├── gin/       (main.go, README.md)
+│   └── nethttp/   (main.go, README.md)
 │
-├── templates/                         # Code Generation Templates
-│   ├── migration.tmpl                # Migration template
-│   ├── migration_create.tmpl         # Create table migration
-│   ├── migration_alter.tmpl          # Alter table migration
-│   ├── seeder.tmpl                   # Seeder template
-│   └── factory.tmpl                  # Factory template
-│
-├── docs/                              # Documentation
-│   ├── getting-started.md
-│   ├── migrations.md
-│   ├── seeders.md
-│   ├── schema-builder.md
-│   ├── factories.md
-│   ├── cli-commands.md
-│   ├── configuration.md
-│   ├── multi-database.md
-│   ├── hooks.md
-│   └── api-reference.md
-│
-├── scripts/                           # Build & Development Scripts
-│   ├── build.sh                      # Build script
-│   ├── test.sh                       # Test script
-│   ├── release.sh                    # Release script
-│   ├── install.sh                    # Installation script
-│   └── dev-setup.sh                  # Dev environment setup
-│
-├── .github/                           # GitHub Configuration
-│   ├── workflows/
-│   │   ├── test.yml                  # CI testing
-│   │   ├── lint.yml                  # Linting
-│   │   ├── release.yml               # Release automation
-│   │   └── codeql.yml                # Security scanning
-│   │
-│   ├── ISSUE_TEMPLATE/
-│   │   ├── bug_report.md
-│   │   └── feature_request.md
-│   │
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── FUNDING.yml
-│
-├── deployments/                       # Deployment Configurations
-│   ├── docker/
-│   │   ├── Dockerfile
-│   │   ├── Dockerfile.dev
-│   │   └── docker-compose.yml
-│   │
-│   └── kubernetes/
-│       ├── deployment.yaml
-│       └── service.yaml
-│
-├── .gitignore                        # Git ignore file
-├── .golangci.yml                     # Linter configuration
-├── .editorconfig                     # Editor configuration
-├── go.mod                            # Go modules
-├── go.sum                            # Go dependencies checksum
-├── Makefile                          # Build automation
-├── LICENSE                           # License file
-├── README.md                         # Main documentation
-├── CHANGELOG.md                      # Version changelog
-├── CONTRIBUTING.md                   # Contribution guidelines
-├── CODE_OF_CONDUCT.md               # Code of conduct
-├── config.example.yaml              # Example configuration
-└── .goreleaser.yml                  # GoReleaser config
+├── .gitignore
+├── .goreleaser.yml                   # Release builds (CGO_ENABLED=0)
+├── FOLDER_STRUCTURE.md
+├── LICENSE
+├── Makefile                          # build, install, clean, test, test-integration
+├── README.md
+├── go.mod
+└── go.sum
 ```
 
-## Penjelasan Struktur
+Some packages also contain an empty `.gitkeep` file.
 
-### 1. `/cmd` - Application Entry Points
-Berisi executable programs. Setiap subdirectory adalah satu binary.
+## Directory roles
 
-**Best Practice:**
-- Keep it thin - hanya setup dan call ke pkg
-- No business logic di sini
-- Import dari `/pkg` dan `/internal`
+### `/cmd`
+The CLI binary. It only blank-imports the database drivers (and, in a user's
+project, the migrations/seeders packages) and calls `migrator.Run()`. No
+business logic lives here. `migrator init` generates an equivalent
+`cmd/migrator/main.go` in a user's project.
 
-### 2. `/pkg` - Public Library Code
-Code yang boleh diimport oleh aplikasi lain.
+### `/pkg`
+The public, importable API: `migrator`, `schema` (+ `grammars`), `seeder`
+(+ `factory`), `database` (+ `drivers`), `config` and `cli`.
 
-**Best Practice:**
-- Well-documented public APIs
-- Stable interfaces
-- Backward compatibility
-- Minimal external dependencies
+### `/internal`
+Implementation details that other modules cannot import: the code generator
+and its embedded templates, the logger, the file scanner and small utilities.
+Generator templates live only in `internal/generator/templates` and are
+compiled into the binary with `go:embed`.
 
-### 3. `/internal` - Private Application Code
-Code yang tidak boleh diimport oleh aplikasi lain (Go enforced).
+### `/tests`
+`tests/integration` holds the integration suite, which runs only with
+`-tags integration` (see README, "Testing"). Unit and property tests are next
+to the code in each package. The other subdirectories are empty placeholders.
 
-**Best Practice:**
-- Implementation details
-- Utilities khusus aplikasi ini
-- Tidak perlu maintain backward compatibility
+### `/examples`
+Minimal programs showing how to run migrations from Echo, Fiber, Gin and
+net/http applications.
 
-### 4. `/examples` - Contoh Penggunaan
-Demonstrasi cara menggunakan package.
-
-**Best Practice:**
-- Self-contained examples
-- Cover common use cases
-- Include README di setiap example
-
-### 5. `/tests` - Test Suite
-Organized test files terpisah dari source code.
-
-**Best Practice:**
-- Unit tests: Fast, isolated
-- Integration tests: Real database
-- E2E tests: Full workflow
-
-### 6. `/templates` - Code Generation
-Template untuk generate code.
-
-**Best Practice:**
-- Use Go templates
-- Parameterized
-- Easy to customize
-
-### 7. `/docs` - Documentation
-Comprehensive documentation.
-
-**Best Practice:**
-- Markdown format
-- Include examples
-- Keep updated
-
-## File Naming Conventions
+## File naming conventions
 
 ```
-# Migration files
-YYYYMMDDHHMMSS_description.go
-20240215120000_create_users_table.go
+# Migration files (generated by make:migration; description is lower snake_case,
+# RRRR is a random 4-digit suffix)
+YYYY_MM_DD_HHMMSS_RRRR_description.go
+2024_02_15_120000_4821_create_users_table.go
+# Hand-written migrations may also use YYYYMMDDHHMMSS_description
 
-# Seeder files
-name_seeder.go
-user_seeder.go
-post_seeder.go
+# Seeder / factory files (generated by make:seeder / make:factory)
+<name>_seeder.go
+<name>_factory.go
 
-# Test files
-*_test.go
-migrator_test.go
-
-# Interface files
-interfaces.go
-
-# Implementation files
-Descriptive names
-postgres.go (not pg.go)
+# Tests
+*_test.go                            # unit tests
+*_property_test.go                   # property-based tests (pgregory.net/rapid)
+tests/integration/*_test.go          # integration tests (//go:build integration)
 ```
 
-## Import Path Examples
+Registered migration names must match
+`^(\d{14}|\d{4}_\d{2}_\d{2}_\d{6}_\d{4})_[a-z][a-z0-9_]*$`.
+
+## Import paths
 
 ```go
-// Public API
-import "github.com/yourusername/go-migrator/pkg/migrator"
-import "github.com/yourusername/go-migrator/pkg/schema"
-import "github.com/yourusername/go-migrator/pkg/seeder"
-
-// Internal (only within go-migrator)
-import "github.com/yourusername/go-migrator/internal/config"
-import "github.com/yourusername/go-migrator/internal/logger"
+import "github.com/gopackx/go-migration/pkg/migrator"
+import "github.com/gopackx/go-migration/pkg/schema"
+import "github.com/gopackx/go-migration/pkg/schema/grammars"
+import "github.com/gopackx/go-migration/pkg/seeder"
+import "github.com/gopackx/go-migration/pkg/seeder/factory"
+import "github.com/gopackx/go-migration/pkg/database"
+import "github.com/gopackx/go-migration/pkg/database/drivers"
 ```
-
-## Keuntungan Struktur Ini
-
-1. **Clear Separation**: Public vs Private code jelas terpisah
-2. **Scalable**: Mudah tambah fitur baru
-3. **Testable**: Test organization yang baik
-4. **Go Standard**: Mengikuti Go project layout standard
-5. **Enterprise Ready**: Suitable untuk production use
-6. **Developer Friendly**: Easy to navigate dan understand
